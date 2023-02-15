@@ -114,7 +114,7 @@ final class Selection {
       }
       ImmutableList<Version> allowedVersions = ((MultipleVersionOverride) override).getVersions();
       for (Version allowedVersion : allowedVersions) {
-        Module allowedVersionModule = depGraph.get(ModuleKey.create(moduleName, allowedVersion));
+        Module allowedVersionModule = depGraph.get(ModuleKey.create(moduleName, allowedVersion, 0));
         if (allowedVersionModule == null) {
           throw ExternalDepsException.withMessage(
               Code.VERSION_RESOLUTION_ERROR,
@@ -205,7 +205,7 @@ final class Selection {
           module.withDepKeysTransformed(
               depKey ->
                   ModuleKey.create(
-                      depKey.getName(), selectedVersions.get(selectionGroups.get(depKey))));
+                      depKey.getName(), selectedVersions.get(selectionGroups.get(depKey)), 0));
 
       // Add all updated modules to the un-pruned dep graph.
       unprunedDepGraphBuilder.put(key, updatedModule);

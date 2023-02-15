@@ -342,7 +342,7 @@ public final class ModqueryCommand implements BlazeCommand {
     if (target.getVersion() == null) {
       return existingKeys;
     }
-    ModuleKey key = ModuleKey.create(target.getName(), target.getVersion());
+    ModuleKey key = ModuleKey.create(target.getName(), target.getVersion(), 0);
     if (!existingKeys.contains(key)) {
       throw new InvalidArgumentException(
           String.format(

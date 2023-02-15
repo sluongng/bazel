@@ -181,7 +181,7 @@ public class ModuleFileFunction implements SkyFunction {
             .stream()
             .collect(
                 toImmutableMap(
-                    name -> ModuleKey.create(name, Version.EMPTY).getCanonicalRepoName(),
+                    name -> ModuleKey.create(name, Version.EMPTY, 0).getCanonicalRepoName(),
                     name -> name));
     return RootModuleFileValue.create(
         module, overrides, nonRegistryOverrideCanonicalRepoNameLookup);

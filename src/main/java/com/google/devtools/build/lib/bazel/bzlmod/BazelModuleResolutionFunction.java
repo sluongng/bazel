@@ -273,7 +273,7 @@ public class BazelModuleResolutionFunction implements SkyFunction {
             Transience.PERSISTENT);
       }
 
-      allowedYankedVersionBuilder.add(ModuleKey.create(pieces[0], version));
+      allowedYankedVersionBuilder.add(ModuleKey.create(pieces[0], version, 0));
     }
     return false;
   }

@@ -41,13 +41,13 @@ public abstract class ModuleKey {
           "local_config_platform",
           RepositoryName.createUnvalidated("local_config_platform"));
 
-  public static final ModuleKey ROOT = create("", Version.EMPTY);
+  public static final ModuleKey ROOT = create("", Version.EMPTY, 0);
 
   public static final Comparator<ModuleKey> LEXICOGRAPHIC_COMPARATOR =
       Comparator.comparing(ModuleKey::getName).thenComparing(ModuleKey::getVersion);
 
-  public static ModuleKey create(String name, Version version) {
-    return new AutoValue_ModuleKey(name, version);
+  public static ModuleKey create(String name, Version version, int compatibilityLevel) {
+    return new AutoValue_ModuleKey(name, version, compatibilityLevel);
   }
 
   /** The name of the module. Must be empty for the root module. */
@@ -55,6 +55,9 @@ public abstract class ModuleKey {
 
   /** The version of the module. Must be empty iff the module has a {@link NonRegistryOverride}. */
   public abstract Version getVersion();
+
+  /** The version of the module. Must be empty iff the module has a {@link NonRegistryOverride}. */
+  public abstract int getCompatibilityLevel();
 
   @Override
   public final String toString() {

@@ -37,7 +37,7 @@ public final class BzlmodTestUtil {
   /** Simple wrapper around {@link ModuleKey#create} that takes a string version. */
   public static ModuleKey createModuleKey(String name, String version) {
     try {
-      return ModuleKey.create(name, Version.parse(version));
+      return ModuleKey.create(name, Version.parse(version), 0);
     } catch (Version.ParseException e) {
       throw new IllegalArgumentException(e);
     }
@@ -54,7 +54,7 @@ public final class BzlmodTestUtil {
 
     public static ModuleBuilder create(String name, Version version, int compatibilityLevel) {
       ModuleBuilder moduleBuilder = new ModuleBuilder();
-      ModuleKey key = ModuleKey.create(name, version);
+      ModuleKey key = ModuleKey.create(name, version, 0);
       moduleBuilder.key = key;
       moduleBuilder.builder =
           Module.builder()

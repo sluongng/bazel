@@ -82,7 +82,7 @@ public class ModuleFileGlobals {
         // The built-in module does not depend on itself.
         continue;
       }
-      deps.put(builtinModule, ModuleKey.create(builtinModule, Version.EMPTY));
+      deps.put(builtinModule, ModuleKey.create(builtinModule, Version.EMPTY, 0));
       try {
         addRepoNameUsage(builtinModule, "as a built-in dependency", Location.BUILTIN);
       } catch (EvalException e) {
@@ -277,6 +277,12 @@ public class ModuleFileGlobals {
             positional = false,
             defaultValue = "''"),
         @Param(
+            name = "compatibility_level",
+            doc = "TODO",
+            named = true,
+            positional = false,
+            defaultValue = "0"),
+        @Param(
             name = "repo_name",
             doc =
                 "The name of the external repo representing this dependency. This is by default the"
@@ -295,7 +301,7 @@ public class ModuleFileGlobals {
       },
       useStarlarkThread = true)
   public void bazelDep(
-      String name, String version, String repoName, boolean devDependency, StarlarkThread thread)
+      String name, String version, StarlarkInt compatibilityLevel, String repoName, boolean devDependency, StarlarkThread thread)
       throws EvalException {
     if (repoName.isEmpty()) {
       repoName = name;
@@ -310,7 +316,7 @@ public class ModuleFileGlobals {
     RepositoryName.validateUserProvidedRepoName(repoName);
 
     if (!(ignoreDevDeps && devDependency)) {
-      deps.put(repoName, ModuleKey.create(name, parsedVersion));
+      deps.put(repoName, ModuleKey.create(name, parsedVersion, 0));
     }
 
     addRepoNameUsage(repoName, "by a bazel_dep", thread.getCallerLocation());

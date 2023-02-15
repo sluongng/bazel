@@ -100,7 +100,7 @@ final class Discovery {
             }
           }
 
-          return ModuleKey.create(depKey.getName(), newVersion);
+          return ModuleKey.create(depKey.getName(), newVersion, 0);
         });
   }
 }
