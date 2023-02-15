@@ -36,8 +36,13 @@ public final class BzlmodTestUtil {
 
   /** Simple wrapper around {@link ModuleKey#create} that takes a string version. */
   public static ModuleKey createModuleKey(String name, String version) {
+    return createModuleKeyWithCompatibilityLevel(name, version, 0);
+  }
+
+  /** Simple wrapper around {@link ModuleKey#create} that takes a string version and an int compatibility level. */
+  public static ModuleKey createModuleKeyWithCompatibilityLevel(String name, String version, int compatibilityLevel) {
     try {
-      return ModuleKey.create(name, Version.parse(version), 0);
+      return ModuleKey.create(name, Version.parse(version), compatibilityLevel);
     } catch (Version.ParseException e) {
       throw new IllegalArgumentException(e);
     }
