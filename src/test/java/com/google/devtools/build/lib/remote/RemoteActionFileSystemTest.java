@@ -326,7 +326,7 @@ public final class RemoteActionFileSystemTest extends RemoteActionFileSystemTest
     byte[] contentBytes = content.getBytes(StandardCharsets.UTF_8);
     HashCode hashCode = HASH_FUNCTION.getHashFunction().hashBytes(contentBytes);
     ((RemoteActionFileSystem) actionFs)
-        .injectRemoteFile(path, hashCode.asBytes(), contentBytes.length);
+        .injectRemoteFile(path, hashCode.asBytes(), contentBytes.length, "action-id");
   }
 
   @Override
@@ -342,7 +342,7 @@ public final class RemoteActionFileSystemTest extends RemoteActionFileSystemTest
     byte[] b = contents.getBytes(StandardCharsets.UTF_8);
     HashCode h = HASH_FUNCTION.getHashFunction().hashBytes(b);
     RemoteFileArtifactValue f =
-        RemoteFileArtifactValue.create(h.asBytes(), b.length, /* locationIndex= */ 1);
+        RemoteFileArtifactValue.create(h.asBytes(), b.length, /* locationIndex= */ 1, "action-id");
     inputs.putWithNoDepOwner(a, f);
     return a;
   }
@@ -364,7 +364,8 @@ public final class RemoteActionFileSystemTest extends RemoteActionFileSystemTest
       byte[] b = entry.getValue().getBytes(StandardCharsets.UTF_8);
       HashCode h = HASH_FUNCTION.getHashFunction().hashBytes(b);
       RemoteFileArtifactValue childMeta =
-          RemoteFileArtifactValue.create(h.asBytes(), b.length, /* locationIndex= */ 0);
+          RemoteFileArtifactValue.create(
+              h.asBytes(), b.length, /* locationIndex= */ 0, "action-id");
       builder.putChild(child, childMeta);
     }
     return builder.build();

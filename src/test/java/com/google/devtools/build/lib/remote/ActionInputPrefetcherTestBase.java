@@ -103,6 +103,7 @@ public abstract class ActionInputPrefetcherTestBase {
             hashCode.asBytes(),
             contentsBytes.length,
             /* locationIndex= */ 1,
+            "action-id",
             materializationExecPath);
     metadata.put(a, f);
     if (cas != null) {

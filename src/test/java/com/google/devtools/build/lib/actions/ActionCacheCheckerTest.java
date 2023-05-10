@@ -464,7 +464,8 @@ public class ActionCacheCheckerTest {
   private RemoteFileArtifactValue createRemoteFileMetadata(
       String content, @Nullable PathFragment materializationExecPath) {
     byte[] bytes = content.getBytes(UTF_8);
-    return RemoteFileArtifactValue.create(digest(bytes), bytes.length, 1, materializationExecPath);
+    return RemoteFileArtifactValue.create(
+        digest(bytes), bytes.length, 1, "action-id", materializationExecPath);
   }
 
   private static TreeArtifactValue createTreeMetadata(

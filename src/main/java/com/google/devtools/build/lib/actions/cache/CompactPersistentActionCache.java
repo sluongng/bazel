@@ -77,7 +77,7 @@ public class CompactPersistentActionCache implements ActionCache {
 
   private static final int NO_INPUT_DISCOVERY_COUNT = -1;
 
-  private static final int VERSION = 15;
+  private static final int VERSION = 14;
 
   private static final class ActionMap extends PersistentMap<Integer, byte[]> {
     private final Clock clock;
@@ -476,6 +476,8 @@ public class CompactPersistentActionCache implements ActionCache {
 
     VarInt.putVarInt(value.getLocationIndex(), sink);
 
+    VarInt.putVarInt(indexer.getOrCreateIndex(value.getActionId()), sink);
+
     Optional<PathFragment> materializationExecPath = value.getMaterializationExecPath();
     if (materializationExecPath.isPresent()) {
       VarInt.putVarInt(1, sink);
@@ -499,6 +501,8 @@ public class CompactPersistentActionCache implements ActionCache {
 
     int locationIndex = VarInt.getVarInt(source);
 
+    String actionId = getStringForIndex(indexer, VarInt.getVarInt(source));
+
     PathFragment materializationExecPath = null;
     int numMaterializationExecPath = VarInt.getVarInt(source);
     if (numMaterializationExecPath > 0) {
@@ -509,7 +513,8 @@ public class CompactPersistentActionCache implements ActionCache {
           PathFragment.create(getStringForIndex(indexer, VarInt.getVarInt(source)));
     }
 
-    return RemoteFileArtifactValue.create(digest, size, locationIndex, materializationExecPath);
+    return RemoteFileArtifactValue.create(
+        digest, size, locationIndex, actionId, materializationExecPath);
   }
 
   /** @return action data encoded as a byte[] array. */
