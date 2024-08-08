@@ -101,6 +101,7 @@ import com.google.devtools.build.lib.remote.common.RemoteExecutionClient;
 import com.google.devtools.build.lib.remote.common.RemotePathResolver;
 import com.google.devtools.build.lib.remote.merkletree.MerkleTree;
 import com.google.devtools.build.lib.remote.options.RemoteOptions;
+import com.google.devtools.build.lib.remote.options.RemoteOutputsMode;
 import com.google.devtools.build.lib.remote.salt.CacheSalt;
 import com.google.devtools.build.lib.remote.util.DigestUtil;
 import com.google.devtools.build.lib.remote.util.TempPathGenerator;
@@ -1162,6 +1163,11 @@ public class RemoteExecutionService {
     // from completing sooner under the dynamic execution strategy.
     Map<Path, Path> realToTmpPath = new HashMap<>();
 
+    // Only download the action stdout/stderr if the action has some output files downloaded.
+    // This avoids downloading the action's stdout/stderr when Build without the Bytes is used
+    // and the action is not a top-level target or matched by the download regex patterns.
+    var shouldDownloadOutErr = false;
+
     for (FileMetadata file : metadata.files()) {
       if (realToTmpPath.containsKey(file.path)) {
         continue;
@@ -1172,11 +1178,13 @@ public class RemoteExecutionService {
       if (!isInMemoryOutputFile && shouldDownload(result, execPath)) {
         Path tmpPath = tempPathGenerator.generateTempPath();
         realToTmpPath.put(file.path, tmpPath);
+        shouldDownloadOutErr = true;
         downloadsBuilder.add(
             downloadFile(
                 context, progressStatusListener, file, tmpPath, action.getRemotePathResolver()));
       } else {
         if (hasBazelOutputService) {
+          shouldDownloadOutErr = true;
           downloadsBuilder.add(immediateFuture(file));
         } else {
           checkNotNull(remoteActionFileSystem)
@@ -1188,6 +1196,7 @@ public class RemoteExecutionService {
         }
 
         if (isInMemoryOutputFile) {
+          shouldDownloadOutErr = true;
           downloadsBuilder.add(
               transform(
                   remoteCache.downloadBlob(
@@ -1209,13 +1218,16 @@ public class RemoteExecutionService {
         if (shouldDownload(result, file.path.relativeTo(execRoot))) {
           Path tmpPath = tempPathGenerator.generateTempPath();
           realToTmpPath.put(file.path, tmpPath);
+          shouldDownloadOutErr = true;
           downloadsBuilder.add(
               downloadFile(
                   context, progressStatusListener, file, tmpPath, action.getRemotePathResolver()));
         } else {
           if (hasBazelOutputService) {
+            shouldDownloadOutErr = true;
             downloadsBuilder.add(immediateFuture(file));
           } else {
+            shouldDownloadOutErr = false;
             checkNotNull(remoteActionFileSystem)
                 .injectRemoteFile(
                     file.path().asFragment(),
@@ -1228,13 +1240,15 @@ public class RemoteExecutionService {
     }
 
     FileOutErr outErr = action.getSpawnExecutionContext().getFileOutErr();
-
-    // Always download the action stdout/stderr.
     FileOutErr tmpOutErr = outErr.childOutErr();
-    List<ListenableFuture<Void>> outErrDownloads =
-        remoteCache.downloadOutErr(context, result.actionResult, tmpOutErr);
-    for (ListenableFuture<Void> future : outErrDownloads) {
-      downloadsBuilder.add(transform(future, (v) -> null, directExecutor()));
+
+    // Conditionally download the action stdout/stderr.
+    if (shouldDownloadOutErr) {
+      List<ListenableFuture<Void>> outErrDownloads =
+          remoteCache.downloadOutErr(context, result.actionResult, tmpOutErr);
+      for (ListenableFuture<Void> future : outErrDownloads) {
+        downloadsBuilder.add(transform(future, (v) -> null, directExecutor()));
+      }
     }
 
     ImmutableList<ListenableFuture<FileMetadata>> downloads = downloadsBuilder.build();

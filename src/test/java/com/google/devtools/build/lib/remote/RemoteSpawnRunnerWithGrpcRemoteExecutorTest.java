@@ -491,6 +491,9 @@ public class RemoteSpawnRunnerWithGrpcRemoteExecutorTest {
 
   @Test
   public void cacheHitWithOutput() throws Exception {
+    when(remoteOutputChecker.shouldDownloadOutput(ArgumentMatchers.<PathFragment>any()))
+        .thenReturn(true);
+
     final Digest stdOutDigest = DIGEST_UTIL.computeAsUtf8("stdout");
     final Digest stdErrDigest = DIGEST_UTIL.computeAsUtf8("stderr");
     serviceRegistry.addService(
@@ -522,6 +525,9 @@ public class RemoteSpawnRunnerWithGrpcRemoteExecutorTest {
 
   @Test
   public void cacheHitWithInlineOutput() throws Exception {
+    when(remoteOutputChecker.shouldDownloadOutput(ArgumentMatchers.<PathFragment>any()))
+        .thenReturn(true);
+
     serviceRegistry.addService(
         new ActionCacheImplBase() {
           @Override
@@ -684,6 +690,9 @@ public class RemoteSpawnRunnerWithGrpcRemoteExecutorTest {
 
   @Test
   public void remotelyExecute() throws Exception {
+    when(remoteOutputChecker.shouldDownloadOutput(ArgumentMatchers.<PathFragment>any()))
+        .thenReturn(true);
+
     BindableService actionCache =
         new ActionCacheImplBase() {
           @Override
@@ -1069,6 +1078,9 @@ public class RemoteSpawnRunnerWithGrpcRemoteExecutorTest {
 
   @Test
   public void passCacheMissErrorWithStackTrace() throws Exception {
+    when(remoteOutputChecker.shouldDownloadOutput(ArgumentMatchers.<PathFragment>any()))
+        .thenReturn(true);
+
     serviceRegistry.addService(
         new ActionCacheImplBase() {
           @Override
@@ -1130,6 +1142,9 @@ public class RemoteSpawnRunnerWithGrpcRemoteExecutorTest {
 
   @Test
   public void passRepeatedOrphanedCacheMissErrorWithStackTrace() throws Exception {
+    when(remoteOutputChecker.shouldDownloadOutput(ArgumentMatchers.<PathFragment>any()))
+        .thenReturn(true);
+
     final Digest stdOutDigest = DIGEST_UTIL.computeAsUtf8("bloo");
     final ActionResult actionResult =
         ActionResult.newBuilder()
@@ -1192,6 +1207,9 @@ public class RemoteSpawnRunnerWithGrpcRemoteExecutorTest {
 
   @Test
   public void remotelyReExecuteOrphanedCachedActions() throws Exception {
+    when(remoteOutputChecker.shouldDownloadOutput(ArgumentMatchers.<PathFragment>any()))
+        .thenReturn(true);
+
     final Digest stdOutDigest = DIGEST_UTIL.computeAsUtf8("stdout");
     final ActionResult actionResult =
         ActionResult.newBuilder()

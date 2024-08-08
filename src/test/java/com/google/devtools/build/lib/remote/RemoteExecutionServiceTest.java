@@ -1059,11 +1059,13 @@ public class RemoteExecutionServiceTest {
     FileOutErr spyOutErr = spy(outErr);
     FileOutErr spyChildOutErr = spy(childOutErr);
     when(spyOutErr.childOutErr()).thenReturn(spyChildOutErr);
+    Digest d1 = cache.addContents(remoteActionExecutionContext, "content1");
     Digest digestStdout = cache.addContents(remoteActionExecutionContext, "stdout");
     Digest digestStderr = cache.addContents(remoteActionExecutionContext, "stderr");
     ActionResult actionResult =
         ActionResult.newBuilder()
             .setExitCode(0)
+            .addOutputFiles(OutputFile.newBuilder().setPath("outputs/file1").setDigest(d1))
             .setStdoutDigest(digestStdout)
             .setStderrDigest(digestStderr)
             .build();
@@ -1102,11 +1104,13 @@ public class RemoteExecutionServiceTest {
     FileOutErr spyChildOutErr = spy(childOutErr);
     when(spyOutErr.childOutErr()).thenReturn(spyChildOutErr);
     // Don't add stdout/stderr as a known blob to the remote cache so that downloading it will fail
+    Digest d1 = cache.addContents(remoteActionExecutionContext, "content1");
     Digest digestStdout = digestUtil.computeAsUtf8("stdout");
     Digest digestStderr = digestUtil.computeAsUtf8("stderr");
     ActionResult actionResult =
         ActionResult.newBuilder()
             .setExitCode(0)
+            .addOutputFiles(OutputFile.newBuilder().setPath("outputs/file1").setDigest(d1))
             .setStdoutDigest(digestStdout)
             .setStderrDigest(digestStderr)
             .build();
@@ -1389,11 +1393,13 @@ public class RemoteExecutionServiceTest {
   @Test
   public void downloadOutputs_nonInlinedStdoutAndStderr_alwaysDownload() throws Exception {
     // arrange
+    Digest d1 = cache.addContents(remoteActionExecutionContext, "content1");
     Digest dOut = cache.addContents(remoteActionExecutionContext, "stdout");
     Digest dErr = cache.addContents(remoteActionExecutionContext, "stderr");
     ActionResult r =
         ActionResult.newBuilder()
             .setExitCode(0)
+            .addOutputFiles(OutputFile.newBuilder().setPath("outputs/file1").setDigest(d1))
             .setStdoutDigest(dOut)
             .setStderrDigest(dErr)
             .build();
@@ -1404,6 +1410,8 @@ public class RemoteExecutionServiceTest {
     RemoteExecutionService service = newRemoteExecutionService();
     RemoteAction action = service.buildRemoteAction(spawn, context);
     createOutputDirectories(spawn);
+    when(remoteOutputChecker.shouldDownloadOutput(ArgumentMatchers.<PathFragment>any()))
+        .thenReturn(true);
 
     // act
     InMemoryOutput inMemoryOutput = service.downloadOutputs(action, result);
@@ -1415,19 +1423,20 @@ public class RemoteExecutionServiceTest {
     assertThat(actionFs.getDigest(outErr.getErrorPathFragment())).isEqualTo(toBinaryDigest(dErr));
     assertThat(outErr.outAsLatin1()).isEqualTo("stdout");
     assertThat(outErr.errAsLatin1()).isEqualTo("stderr");
-    Path outputBase = checkNotNull(artifactRoot.getRoot().asPath());
-    assertThat(outputBase.readdir(Symlinks.NOFOLLOW)).isEmpty();
+    assertThat(execRoot.getRelative("outputs/file1").exists()).isTrue();
     assertThat(context.isLockOutputFilesCalled()).isTrue();
   }
 
   @Test
   public void downloadOutputs_inlinedStdoutAndStderr_alwaysDownload() throws Exception {
     // arrange
+    Digest d1 = cache.addContents(remoteActionExecutionContext, "content1");
     Digest dOut = digestUtil.compute("stdout".getBytes(UTF_8));
     Digest dErr = digestUtil.compute("stderr".getBytes(UTF_8));
     ActionResult r =
         ActionResult.newBuilder()
             .setExitCode(0)
+            .addOutputFiles(OutputFile.newBuilder().setPath("outputs/file1").setDigest(d1))
             .setStdoutRaw(ByteString.copyFromUtf8("stdout"))
             .setStderrRaw(ByteString.copyFromUtf8("stderr"))
             .build();
@@ -1438,6 +1447,8 @@ public class RemoteExecutionServiceTest {
     RemoteExecutionService service = newRemoteExecutionService();
     RemoteAction action = service.buildRemoteAction(spawn, context);
     createOutputDirectories(spawn);
+    when(remoteOutputChecker.shouldDownloadOutput(ArgumentMatchers.<PathFragment>any()))
+        .thenReturn(true);
 
     // act
     InMemoryOutput inMemoryOutput = service.downloadOutputs(action, result);
@@ -1450,8 +1461,7 @@ public class RemoteExecutionServiceTest {
     assertThat(inMemoryOutput).isNull();
     assertThat(outErr.outAsLatin1()).isEqualTo("stdout");
     assertThat(outErr.errAsLatin1()).isEqualTo("stderr");
-    Path outputBase = checkNotNull(artifactRoot.getRoot().asPath());
-    assertThat(outputBase.readdir(Symlinks.NOFOLLOW)).isEmpty();
+    assertThat(execRoot.getRelative("outputs/file1").exists()).isTrue();
     assertThat(context.isLockOutputFilesCalled()).isTrue();
   }
 
