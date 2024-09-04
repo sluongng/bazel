@@ -526,6 +526,16 @@ sh_test(
         "//src/test/java/com/google/devtools/build/lib/worker:ExampleWorker_deploy.jar",
     ],
     shard_count = 3,
+    env = {
+        "TEST_TMPDIR": "/var/tmp",
+    },
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+        "test.EstimatedComputeUnits": "4",
+        "test.EstimatedMemory": "16GB",
+        "test.EstimatedFreeDiskBytes": "100GB",
+    },
     tags = [
         # MacOS does not have cgroups so it can't support hardened sandbox
         "no_macos",
@@ -603,6 +613,16 @@ sh_test(
         "//src/test/java/com/google/devtools/build/lib/worker:ExampleWorker_deploy.jar",
     ],
     shard_count = 3,
+    env = {
+        "TEST_TMPDIR": "/var/tmp",
+    },
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+        "test.EstimatedComputeUnits": "4",
+        "test.EstimatedMemory": "16GB",
+        "test.EstimatedFreeDiskBytes": "100GB",
+    },
     tags = [
         # MacOS does not have cgroups so it can't support hardened sandbox
         "no_macos",
@@ -624,6 +644,16 @@ sh_test(
         "//src/test/java/com/google/devtools/build/lib/worker:ExampleWorker_deploy.jar",
     ],
     shard_count = 3,
+    env = {
+        "TEST_TMPDIR": "/var/tmp",
+    },
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+        "test.EstimatedComputeUnits": "4",
+        "test.EstimatedMemory": "16GB",
+        "test.EstimatedFreeDiskBytes": "100GB",
+    },
     tags = [
         # MacOS does not have cgroups so it can't support hardened sandbox
         "no_macos",
@@ -658,6 +688,13 @@ sh_test(
         ":test-deps",
         "@bazel_tools//tools/bash/runfiles",
     ],
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+        "test.EstimatedComputeUnits": "4",
+        "test.EstimatedMemory": "16GB",
+        "test.EstimatedFreeDiskBytes": "50GB",
+    },
 )
 
 sh_test(
@@ -717,6 +754,13 @@ sh_test(
         "//src/main/protobuf:execution_statistics.proto",
         "//src/test/shell:sandboxing_test_utils.sh",
     ],
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+        "test.EstimatedComputeUnits": "4",
+        "test.EstimatedMemory": "16GB",
+        "test.EstimatedFreeDiskBytes": "50GB",
+    },
     tags = ["no_windows"],
 )
 
@@ -728,6 +772,10 @@ sh_test(
         ":test-deps",
         "//src/test/shell:sandboxing_test_utils.sh",
     ],
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+    },
     tags = ["no_windows"],
 )
 
@@ -739,6 +787,13 @@ sh_test(
         ":test-deps",
     ],
     shard_count = 4,
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+        "test.EstimatedComputeUnits": "4",
+        "test.EstimatedMemory": "16GB",
+        "test.EstimatedFreeDiskBytes": "50GB",
+    },
     tags = ["no_windows"],
 )
 

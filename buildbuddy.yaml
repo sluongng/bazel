@@ -8,10 +8,8 @@ actions:
         branches:
           - "master"
     steps:
-      # TODO(sluongng): enable more shell tests
-      #   Most of them should be RBE compatible,
-      #   but because some of them do requires additional attention.
-      #   I am just applying a blanket exclusion here due to lack of time.
+      # Shell tests now run under bb-remote; adjust exec_properties or the test
+      # container image if new remote-only failures appear.
       - run: |
           bazel test \
             --config=bb-workflow \
@@ -20,10 +18,6 @@ actions:
             -//examples/... \
             -//scripts/... \
             -//src/main/native/windows/... \
-            -//src/test/shell/bazel:bazel_bootstrap_distfile_tar_test \
-            -//src/test/shell/bazel:bazel_bootstrap_distfile_test \
-            -//src/test/shell/bazel:starlark_repository_test \
-            -//src/test/shell/integration/... \
             -//src/tools/launcher/... \
             -//third_party/... \
             -//tools/...
