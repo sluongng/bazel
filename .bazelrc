@@ -1,3 +1,64 @@
+# ===============================
+# BuildBuddy RBE flags & configs
+# ===============================
+
+startup --digest_function=BLAKE3
+
+common:bb-remote --bes_results_url=https://app.buildbuddy.io/invocation/
+common:bb-remote --bes_backend=grpcs://remote.buildbuddy.io
+common:bb-remote --remote_executor=grpcs://remote.buildbuddy.io
+common:bb-remote --remote_timeout=600
+common:bb-remote --jobs=2000
+common:bb-remote --action_env=PATH=/bin:/usr/bin:/usr/local/bin
+common:bb-remote --extra_toolchains=@toolchains_buildbuddy//toolchains/cc:ubuntu_gcc_x86_64
+common:bb-remote --extra_execution_platforms=//:bb_platform,//:bb_highcpu_platform
+common:bb-remote --platforms=//:bb_platform
+
+# File src/test/shell/testenv.sh setup a bazelrc with
+#   build --java_runtime_version=21
+#   build --tool_java_runtime_version=21
+# which mean that we need to run our shell tests using jdk21.
+# Pointing JAVA_HOME to the jdk setup inside rbe.Dockerfile nudge the Bazel
+# instance in each test to use the local toolchain instead of downloading
+# the jdk fresh in each start.
+common:bb-remote --test_env=JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+
+# In user.bazelrc, add this line
+# common:bb-remote --remote_header=x-buildbuddy-api-key=<YOUR_API_KEY_HERE>
+
+# Best practice
+common:bb-remote --incompatible_strict_action_env
+common:bb-remote --remote_cache_compression
+common:bb-remote --remote_download_minimal
+common:bb-remote --noslim_profile
+common:bb-remote --experimental_profile_include_target_label
+common:bb-remote --experimental_profile_include_primary_output
+common:bb-remote --experimental_remote_cache_lease_extension
+common:bb-remote --execution_log_compact_file=%workspace%/compact_exec_log.binpb.zst
+
+# Enable Remote Persistent Worker for Java actions
+common:bb-remote --noexperimental_remote_mark_tool_inputs
+
+# Ignore slow tests
+common:bb-remote --test_tag_filters=-slow
+
+# Cosmetic only
+common:bb-remote --build_metadata=VISIBILITY=PUBLIC
+common:bb-remote --test_output=errors
+common:bb-remote --test_summary=terse
+common:bb-remote --workspace_status_command=$(pwd)/workspace_status.sh
+# TODO(sluongng): investigate why this add extra empty lines
+# common:bb-remote --ui_actions_shown=32
+
+# Specific to BuildBuddy Workflow
+common:bb-workflow --config=bb-remote
+common:bb-workflow --config=buildbuddy_bes_backend
+common:bb-workflow --config=buildbuddy_bes_results_url
+common:bb-workflow --config=buildbuddy_experimental_remote_downloader
+common:bb-workflow --config=buildbuddy_remote_executor
+## Disable local repo cache on workflow to save disk space
+common:bb-workflow --repository_cache=
+
 common --enable_platform_specific_config
 
 # Either consumed as @remoteapis or as files.

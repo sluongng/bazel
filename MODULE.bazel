@@ -450,6 +450,28 @@ remote_coverage_tools_extension = use_extension("//tools/test:extensions.bzl", "
 use_repo(remote_coverage_tools_extension, "remote_coverage_tools")
 
 # =========================================
+# BuildBuddy platforms & toolchains
+# =========================================
+
+bazel_dep(name = "toolchains_buildbuddy", version = "0.0.4")
+archive_override(
+    module_name = "toolchains_buildbuddy",
+    integrity = "sha256-h0iQ4jAQ7/kSKYrmZW6dk91fLWiuJ4CjLuQu4DdhzSU=",
+    strip_prefix = "buildbuddy-toolchain-e0d0b2a6ba634d81eb3ae8e954c2e51bfe5d0d5d",
+    urls = ["https://github.com/buildbuddy-io/buildbuddy-toolchain/archive/e0d0b2a6ba634d81eb3ae8e954c2e51bfe5d0d5d.tar.gz"],
+)
+
+buildbuddy = use_extension("@toolchains_buildbuddy//:extensions.bzl", "buildbuddy")
+buildbuddy.platform(buildbuddy_container_image = "UBUNTU24_04_IMAGE")
+
+register_toolchains(
+    # CC toolchains
+    "@toolchains_buildbuddy//toolchains/cc:ubuntu_gcc_x86_64",
+    "@toolchains_buildbuddy//toolchains/cc:ubuntu_gcc_arm64",
+    "@toolchains_buildbuddy//toolchains/cc:windows_msvc_x86_64",
+)
+
+# =========================================
 # Register platforms & toolchains
 # =========================================
 

@@ -254,6 +254,10 @@ java_test(
         "//src/main/tools:linux-sandbox",
         "//src/test/shell/integration:spend_cpu_time",
     ],
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+    },
     tags = [
         "no_windows",
         "shell",

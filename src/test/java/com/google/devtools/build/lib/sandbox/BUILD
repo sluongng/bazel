@@ -100,6 +100,12 @@ java_test(
     runtime_deps = [
         "//src/test/java/com/google/devtools/build/lib:test_runner",
     ],
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+        # Also need high memory to avoid OOM-killed
+        "test.EstimatedComputeUnits": "4",
+    },
     deps = [
         ":testutil",
         "//src/main/java/com/google/devtools/build/lib:runtime",
