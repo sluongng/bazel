@@ -42,6 +42,10 @@ sh_test(
     data = [
         "//src/main/tools:linux-sandbox",
     ],
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+    },
     tags = [
         "no_macos",
         "no_windows",

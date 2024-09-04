@@ -34,3 +34,5 @@ eclipse-*bin/
 .bazelversion
 # User-specific .bazelrc
 user.bazelrc
+# Bazel compact exec log
+compact_exec_log.binpb.zst
