@@ -298,9 +298,9 @@ REMOTE_PLATFORMS = ("rbe_ubuntu2004",)
     platform(
         name = platform_name + "_platform",
         exec_properties = {
-            "dockerNetwork": "standard",
-            "dockerPrivileged": "true",
-            "Pool": "default",
+            "dockerNetwork": "bridge",
+            "EstimatedComputeUnits": "2",
+            "test.workload-isolation-type": "firecracker",
         },
         parents = ["@" + platform_name + "//config:platform"],
     )
@@ -316,7 +316,7 @@ REMOTE_PLATFORMS = ("rbe_ubuntu2004",)
             "//:highcpu_machine",
         ],
         exec_properties = {
-            "Pool": "highcpu",
+            "EstimatedComputeUnits": "4",
         },
         parents = ["//:" + platform_name + "_platform"],
     )
