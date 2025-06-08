@@ -51,7 +51,8 @@ public class GrpcRemoteExecutorTest extends GrpcRemoteExecutorTestBase {
             RemoteRetrier.RETRIABLE_GRPC_EXEC_ERRORS,
             retryService);
 
-    return new GrpcRemoteExecutor(channel, CallCredentialsProvider.NO_CREDENTIALS, retrier);
+    return new GrpcRemoteExecutor(
+        remoteOptions, channel, CallCredentialsProvider.NO_CREDENTIALS, retrier);
   }
 
   @Override
