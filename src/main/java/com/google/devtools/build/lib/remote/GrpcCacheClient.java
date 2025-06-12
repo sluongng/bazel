@@ -153,7 +153,8 @@ public class GrpcCacheClient implements RemoteCacheClient, MissingDigestsFinder 
         .withInterceptors(
             TracingMetadataUtils.attachMetadataInterceptor(context.getRequestMetadata()),
             new NetworkTimeInterceptor(context::getNetworkTime),
-            new ResourceNameInterceptor(resourceName))
+            new ResourceNameInterceptor(resourceName),
+            new IdleTimeoutInterceptor(options.remoteTimeout))
         .withCallCredentials(callCredentialsProvider.getCallCredentials())
         .withDeadlineAfter(options.remoteLongTimeout.toSeconds(), TimeUnit.SECONDS);
   }

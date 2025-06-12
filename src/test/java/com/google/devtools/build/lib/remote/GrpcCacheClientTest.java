@@ -377,6 +377,67 @@ public class GrpcCacheClientTest {
   }
 
   @Test
+  public void downloadBlob_idleTimeout_cancelsRequest() throws Exception {
+    // This test verifies two things:
+    //   1. The IdleTimeoutInterceptor cancels a stalled ByteStream.Read call when the server does
+    //      not send any messages within the configured timeout.
+    //   2. After the cancellation, the higher-level retry logic of GrpcCacheClient re-issues the
+    //      download request and succeeds.
+
+    // Arrange – use a small idle timeout to keep the test fast.
+    RemoteOptions remoteOptions = Options.getDefaults(RemoteOptions.class);
+    remoteOptions.remoteTimeout = java.time.Duration.ofSeconds(1);
+    // Allow exactly one retry (i.e. two total attempts: initial + 1 retry).
+    remoteOptions.remoteMaxRetryAttempts = 1;
+
+    Digest digest = DIGEST_UTIL.computeAsUtf8("abcdefg");
+
+    AtomicBoolean firstCallCancelled = new AtomicBoolean();
+    AtomicInteger readCallCount = new AtomicInteger();
+
+    // Fake ByteStream service: first call stalls (to trigger idle timeout); second call succeeds.
+    serviceRegistry.addService(
+        new ByteStreamImplBase() {
+          @Override
+          public void read(ReadRequest request, StreamObserver<ReadResponse> responseObserver) {
+            int callIdx = readCallCount.getAndIncrement();
+            if (callIdx == 0) {
+              // First attempt: do not send any data to simulate a stall.
+              ((ServerCallStreamObserver<ReadResponse>) responseObserver)
+                  .setOnCancelHandler(() -> firstCallCancelled.set(true));
+              // No onNext / onCompleted – the client should cancel after the idle timeout.
+            } else {
+              // Retry attempt: send the entire blob in one chunk and finish.
+              responseObserver.onNext(
+                  ReadResponse
+                      .newBuilder()
+                      .setData(ByteString.copyFromUtf8("abcdefg"))
+                      .build());
+              responseObserver.onCompleted();
+            }
+          }
+        });
+
+    // Use a retry strategy with zero backoff to speed up the test.
+    GrpcCacheClient cacheClient =
+        newClient(
+            remoteOptions,
+            () -> new Retrier.ZeroBackoff(/* maxRetries= */ remoteOptions.remoteMaxRetryAttempts));
+
+    // Act – attempt to download the blob.
+    byte[] downloaded;
+    try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+      getFromFuture(cacheClient.downloadBlob(context, digest, out));
+      downloaded = out.toByteArray();
+    }
+
+    // Assert – first call was cancelled, a retry happened, and the data is correct.
+    assertThat(firstCallCancelled.get()).isTrue();
+    assertThat(readCallCount.get()).isEqualTo(2);
+    assertThat(new String(downloaded, UTF_8)).isEqualTo("abcdefg");
+  }
+
+  @Test
   public void testChunkerResetAfterError() throws Exception {
     // arrange
     GrpcCacheClient client = newClient();
