@@ -342,4 +342,87 @@ EOF
   expect_not_log "arg2"
 }
 
+function test_toolchain_resolution_event() {
+  # Create a simple toolchain setup to trigger toolchain resolution
+  mkdir -p toolchain
+  cat > toolchain/BUILD <<'EOF'
+load(":toolchain.bzl", "test_toolchain")
+
+toolchain_type(name = "test_toolchain_type")
+
+test_toolchain(
+    name = "test_toolchain_impl",
+    value = "test_value",
+)
+
+toolchain(
+    name = "test_toolchain",
+    toolchain = ":test_toolchain_impl",
+    toolchain_type = ":test_toolchain_type",
+)
+EOF
+
+  cat > toolchain/toolchain.bzl <<'EOF'
+def _test_toolchain_impl(ctx):
+    return [platform_common.ToolchainInfo(
+        value = ctx.attr.value,
+    )]
+
+test_toolchain = rule(
+    implementation = _test_toolchain_impl,
+    attrs = {
+        "value": attr.string(),
+    },
+)
+
+def _test_rule_impl(ctx):
+    toolchain = ctx.toolchains["//:test_toolchain_type"]
+    ctx.actions.write(
+        output = ctx.outputs.out,
+        content = "Toolchain value: %s\n" % toolchain.value,
+    )
+
+test_rule = rule(
+    implementation = _test_rule_impl,
+    attrs = {
+        "out": attr.output(),
+    },
+    toolchains = ["//:test_toolchain_type"],
+)
+EOF
+
+  # Create a target that uses the toolchain
+  cat > BUILD <<'EOF'
+load("//toolchain:toolchain.bzl", "test_rule")
+
+test_rule(
+    name = "test_target",
+    out = "test_output.txt",
+)
+EOF
+
+  # Register the toolchain
+  cat > MODULE.bazel <<'EOF'
+register_toolchains("//toolchain:test_toolchain")
+EOF
+
+  # Build with build event stream enabled
+  bazel clean --expunge
+  bazel build --build_event_text_file="${TEST_log}" //:test_target \
+      || fail "bazel build with toolchain failed"
+
+  # Verify the build succeeded
+  expect_log 'name: "SUCCESS"'
+  
+  # Verify toolchain resolution event is present
+  expect_log 'toolchain_resolution'
+  expect_log 'target_label:'
+  expect_log 'success: true'
+  
+  # Check that toolchain mappings are present
+  expect_log 'toolchain_mappings'
+  expect_log 'toolchain_type:.*test_toolchain_type'
+  expect_log 'resolved_toolchains:.*test_toolchain'
+}
+
 run_suite "Bazel-specific integration tests for the build-event stream"
