@@ -127,31 +127,32 @@ public class ToolchainResolutionFunction implements SkyFunction {
           unloadedToolchainContext.toolchainTypeToResolved());
 
       // Post toolchain resolution event
-      ToolchainResolutionEvent successEvent = new ToolchainResolutionEvent(
-          key.configurationKey().toString(), // Use configuration key as identifier for now
-          unloadedToolchainContext.executionPlatform().label().toString(),
-          unloadedToolchainContext.targetPlatform().label().toString(),
-          unloadedToolchainContext.toolchainTypeToResolved(),
-          key.configurationKey(),
-          true, // success
-          null  // no error
-      );
+      ToolchainResolutionEvent successEvent =
+          new ToolchainResolutionEvent(
+              key.configurationKey().toString(), // Use configuration key as identifier for now
+              unloadedToolchainContext.executionPlatform().label().toString(),
+              unloadedToolchainContext.targetPlatform().label().toString(),
+              unloadedToolchainContext.toolchainTypeToResolved(),
+              key.configurationKey(),
+              true, // success
+              null // no error
+              );
       env.getListener().post(successEvent);
 
       return unloadedToolchainContext;
     } catch (ToolchainException e) {
       // Post toolchain resolution failure event
-      ToolchainResolutionEvent failureEvent = new ToolchainResolutionEvent(
-          key.configurationKey().toString(), // Use configuration key as identifier for now
-          null, // no execution platform resolved
-          null, // no target platform resolved
-          ImmutableSetMultimap.of(), // no toolchains resolved
-          key.configurationKey(),
-          false, // failure
-          e.getMessage()
-      );
+      ToolchainResolutionEvent failureEvent =
+          new ToolchainResolutionEvent(
+              key.configurationKey().toString(), // Use configuration key as identifier for now
+              null, // no execution platform resolved
+              null, // no target platform resolved
+              ImmutableSetMultimap.of(), // no toolchains resolved
+              key.configurationKey(),
+              false, // failure
+              e.getMessage());
       env.getListener().post(failureEvent);
-      
+
       throw new ToolchainResolutionFunctionException(e);
     } catch (ValueMissingException e) {
       return null;

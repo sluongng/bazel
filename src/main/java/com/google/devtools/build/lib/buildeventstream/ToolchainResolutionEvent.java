@@ -54,9 +54,8 @@ public record ToolchainResolutionEvent(
 
   @Override
   public BuildEventStreamProtos.BuildEvent asStreamProto(BuildEventContext context) {
-    ToolchainResolution.Builder builder = ToolchainResolution.newBuilder()
-        .setTargetLabel(targetLabel)
-        .setSuccess(success);
+    ToolchainResolution.Builder builder =
+        ToolchainResolution.newBuilder().setTargetLabel(targetLabel).setSuccess(success);
 
     if (executionPlatform != null) {
       builder.setExecutionPlatform(executionPlatform);
@@ -83,8 +82,6 @@ public record ToolchainResolutionEvent(
       builder.addToolchainMappings(mappingBuilder.build());
     }
 
-    return GenericBuildEvent.protoChaining(this)
-        .setToolchainResolution(builder.build())
-        .build();
+    return GenericBuildEvent.protoChaining(this).setToolchainResolution(builder.build()).build();
   }
 }
