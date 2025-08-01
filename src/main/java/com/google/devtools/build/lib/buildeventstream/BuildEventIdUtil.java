@@ -314,4 +314,13 @@ public final class BuildEventIdUtil {
             BuildEventId.ConvenienceSymlinksIdentifiedId.getDefaultInstance())
         .build();
   }
+
+  public static BuildEventId toolchainResolutionId(String targetLabel, BuildConfigurationKey configurationKey) {
+    BuildEventId.ToolchainResolutionId toolchainResolutionId =
+        BuildEventId.ToolchainResolutionId.newBuilder()
+            .setTargetLabel(targetLabel)
+            .setConfiguration(configurationIdMessage(configurationKey))
+            .build();
+    return BuildEventId.newBuilder().setToolchainResolution(toolchainResolutionId).build();
+  }
 }

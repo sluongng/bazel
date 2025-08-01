@@ -259,6 +259,12 @@ message BuildEventId {
   // Identifier of an event providing the ExecRequest of a run command.
   message ExecRequestId {}
 
+  // Identifier of an event reporting toolchain resolution for a target.
+  message ToolchainResolutionId {
+    string target_label = 1;
+    ConfigurationId configuration = 2;
+  }
+
   reserved 27;
 
   oneof id {
@@ -290,6 +296,7 @@ message BuildEventId {
     BuildMetadataId build_metadata = 24;
     ConvenienceSymlinksIdentifiedId convenience_symlinks_identified = 25;
     ExecRequestId exec_request = 28;
+    ToolchainResolutionId toolchain_resolution = 30;
   }
 }
 
@@ -461,6 +468,31 @@ message Configuration {
       ;
   // Whether this configuration is used for building tools.
   bool is_tool = 5;
+}
+
+// Payload of an event reporting toolchain resolution for a target.
+message ToolchainResolution {
+  // The target that required toolchain resolution.
+  string target_label = 1;
+  
+  // The selected execution platform.
+  string execution_platform = 2;
+  
+  // The target platform.
+  string target_platform = 3;
+  
+  // Map of toolchain type to resolved toolchain labels.
+  message ToolchainMapping {
+    string toolchain_type = 1;
+    repeated string resolved_toolchains = 2;
+  }
+  repeated ToolchainMapping toolchain_mappings = 4;
+  
+  // Whether resolution was successful.
+  bool success = 5;
+  
+  // Error message if resolution failed.
+  string error_message = 6;
 }
 
 // Payload of the event indicating the expansion of a target pattern.
@@ -1479,5 +1511,6 @@ message BuildEvent {
     BuildMetadata build_metadata = 26;
     ConvenienceSymlinksIdentified convenience_symlinks_identified = 27;
     ExecRequestConstructed exec_request = 29;
+    ToolchainResolution toolchain_resolution = 31;
   }
 }

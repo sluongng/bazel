@@ -360,6 +360,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/analysis/config:build_configuration",
         "//src/main/java/com/google/devtools/build/lib/analysis/config:common_options",
         "//src/main/java/com/google/devtools/build/lib/analysis/config:toolchain_type_requirement",
+        "//src/main/java/com/google/devtools/build/lib/buildeventstream",
         "//src/main/java/com/google/devtools/build/lib/analysis/platform",
         "//src/main/java/com/google/devtools/build/lib/cmdline",
         "//src/main/java/com/google/devtools/build/lib/events",

@@ -28,6 +28,7 @@ import com.google.devtools.build.lib.analysis.config.BuildConfigurationValue;
 import com.google.devtools.build.lib.analysis.config.ToolchainTypeRequirement;
 import com.google.devtools.build.lib.analysis.platform.PlatformInfo;
 import com.google.devtools.build.lib.analysis.platform.ToolchainTypeInfo;
+import com.google.devtools.build.lib.buildeventstream.ToolchainResolutionEvent;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.server.FailureDetails.Toolchain.Code;
 import com.google.devtools.build.lib.skyframe.ConfiguredTargetKey;
@@ -124,8 +125,33 @@ public class ToolchainResolutionFunction implements SkyFunction {
           unloadedToolchainContext.targetPlatform().label(),
           unloadedToolchainContext.executionPlatform().label(),
           unloadedToolchainContext.toolchainTypeToResolved());
+
+      // Post toolchain resolution event
+      ToolchainResolutionEvent successEvent = new ToolchainResolutionEvent(
+          key.configurationKey().toString(), // Use configuration key as identifier for now
+          unloadedToolchainContext.executionPlatform().label().toString(),
+          unloadedToolchainContext.targetPlatform().label().toString(),
+          unloadedToolchainContext.toolchainTypeToResolved(),
+          key.configurationKey(),
+          true, // success
+          null  // no error
+      );
+      env.getListener().post(successEvent);
+
       return unloadedToolchainContext;
     } catch (ToolchainException e) {
+      // Post toolchain resolution failure event
+      ToolchainResolutionEvent failureEvent = new ToolchainResolutionEvent(
+          key.configurationKey().toString(), // Use configuration key as identifier for now
+          null, // no execution platform resolved
+          null, // no target platform resolved
+          ImmutableSetMultimap.of(), // no toolchains resolved
+          key.configurationKey(),
+          false, // failure
+          e.getMessage()
+      );
+      env.getListener().post(failureEvent);
+      
       throw new ToolchainResolutionFunctionException(e);
     } catch (ValueMissingException e) {
       return null;
