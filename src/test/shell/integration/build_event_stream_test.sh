@@ -1692,4 +1692,133 @@ EOF
   expect_log '"packageLoadMetrics":\[{"name":"foo"[^}]*"globFilesystemOperationCost":"41"'
 }
 
+function write_test_toolchain() {
+  local pkg="${1}"
+  local toolchain_name="${2:-test_toolchain}"
+
+  mkdir -p "${pkg}/toolchain"
+  cat >> "${pkg}/toolchain/toolchain_${toolchain_name}.bzl" <<EOF
+def _impl(ctx):
+  toolchain = platform_common.ToolchainInfo(
+      extra_label = ctx.attr.extra_label,
+      extra_str = ctx.attr.extra_str)
+  return [toolchain]
+
+${toolchain_name} = rule(
+    implementation = _impl,
+    attrs = {
+        'extra_label': attr.label(),
+        'extra_str': attr.string(),
+    }
+)
+EOF
+
+  if [[ ! -e "${pkg}/toolchain/BUILD" ]]; then
+    cat > "${pkg}/toolchain/BUILD" <<EOF
+package(default_visibility = ["//visibility:public"])
+EOF
+  fi
+
+  cat >> "${pkg}/toolchain/BUILD" <<EOF
+toolchain_type(name = '${toolchain_name}')
+EOF
+}
+
+function write_test_rule() {
+  local pkg="${1}"
+  local rule_name="${2:-use_toolchain}"
+  local toolchain_name="${3:-test_toolchain}"
+
+  mkdir -p "${pkg}/toolchain"
+  cat >> "${pkg}/toolchain/rule_${rule_name}.bzl" <<EOF
+def _impl(ctx):
+  toolchain = ctx.toolchains['//${pkg}/toolchain:${toolchain_name}']
+  message = ctx.attr.message
+  print(
+      'Using toolchain: rule message: "%s", toolchain extra_str: "%s"' %
+         (message, toolchain.extra_str))
+  return []
+
+${rule_name} = rule(
+    implementation = _impl,
+    attrs = {
+        'message': attr.string(),
+    },
+    toolchains = ['//${pkg}/toolchain:${toolchain_name}'],
+)
+EOF
+}
+
+function write_register_toolchain() {
+  local pkg="${1}"
+  local toolchain_name="${2:-test_toolchain}"
+  local exec_compatible_with="${3:-"[]"}"
+  local target_compatible_with="${4:-"[]"}"
+
+  cat >> $TOOLCHAIN_REGISTRATION_FILE <<EOF
+register_toolchains('//register/${pkg}:${toolchain_name}_1')
+EOF
+
+  mkdir -p "register/${pkg}"
+
+  if [[ ! -e "register/${pkg}/BUILD" ]]; then
+    cat > "register/${pkg}/BUILD" <<EOF
+package(default_visibility = ["//visibility:public"])
+EOF
+  fi
+  cat >> "register/${pkg}/BUILD" <<EOF
+load('//${pkg}/toolchain:toolchain_${toolchain_name}.bzl', '${toolchain_name}')
+
+# Define the toolchain.
+filegroup(name = 'dep_rule_${toolchain_name}')
+${toolchain_name}(
+    name = '${toolchain_name}_impl_1',
+    extra_label = ':dep_rule_${toolchain_name}',
+    extra_str = 'foo from ${toolchain_name}',
+)
+
+# Declare the toolchain.
+toolchain(
+    name = '${toolchain_name}_1',
+    toolchain_type = '//${pkg}/toolchain:${toolchain_name}',
+    exec_compatible_with = ${exec_compatible_with},
+    target_compatible_with = ${target_compatible_with},
+    toolchain = ':${toolchain_name}_impl_1',
+)
+EOF
+}
+
+function test_toolchain_resolution_event() {
+  local -r pkg="${FUNCNAME[0]}"
+  write_test_toolchain "${pkg}"
+  write_test_rule "${pkg}"
+  write_register_toolchain "${pkg}"
+
+  mkdir -p "${pkg}/demo"
+  cat > "${pkg}/demo/BUILD" <<EOF
+load('//${pkg}/toolchain:rule_use_toolchain.bzl', 'use_toolchain')
+
+package(default_visibility = ["//visibility:public"])
+
+# Use the toolchain.
+use_toolchain(
+    name = 'use',
+    message = 'this is the rule')
+EOF
+
+  bazel build \
+    --toolchain_resolution_details \
+    --build_event_json_file=events.json \
+    "//${pkg}/demo:use" &> $TEST_log || fail "Build failed"
+
+  # Check that the event is present and has the correct structure.
+  expect_log '"toolchainResolution":' events.json
+  expect_log '"targetPlatform":' events.json
+  expect_log '"executionPlatform":' events.json
+  expect_log '"toolchains":' events.json
+  expect_log '"toolchainType":' events.json
+  expect_log '"toolchain":' events.json
+}
+
 run_suite "Integration tests for the build event stream"
+test_toolchain_resolution_event

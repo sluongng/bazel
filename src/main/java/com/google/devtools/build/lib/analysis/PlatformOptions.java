@@ -128,6 +128,13 @@ public class PlatformOptions extends FragmentOptions {
               + "useful to experts in toolchain resolution.")
   public RegexFilter toolchainResolutionDebug;
 
+  @Option(
+      name = "toolchain_resolution_details",
+      defaultValue = "false",
+      documentationCategory = OptionDocumentationCategory.LOGGING,
+      effectTags = {OptionEffectTag.TERMINAL_OUTPUT},
+      help = "Emits a build event with details of the toolchain resolution.")
+  public boolean toolchainResolutionDetails;
 
   @Option(
       name = "incompatible_use_toolchain_resolution_for_java_rules",

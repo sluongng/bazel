@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.Table;
 import com.google.devtools.build.lib.analysis.PlatformConfiguration;
+import com.google.devtools.build.lib.analysis.PlatformOptions;
 import com.google.devtools.build.lib.analysis.config.BuildConfigurationValue;
 import com.google.devtools.build.lib.analysis.config.ToolchainTypeRequirement;
 import com.google.devtools.build.lib.analysis.platform.PlatformInfo;
@@ -75,18 +76,23 @@ public class ToolchainResolutionFunction implements SkyFunction {
       PlatformConfiguration platformConfiguration =
           Preconditions.checkNotNull(configuration.getFragment(PlatformConfiguration.class));
 
+      PlatformOptions platformOptions = configuration.getOptions().get(PlatformOptions.class);
+
       // Check if debug output should be generated.
       boolean debug =
           key.debugTarget()
-              || configuration
-                  .getFragment(PlatformConfiguration.class)
-                  .debugToolchainResolution(
-                      key.toolchainTypes().stream()
-                          .map(ToolchainTypeRequirement::toolchainType)
-                          .collect(toImmutableSet()));
+              || platformOptions.toolchainResolutionDebug.isIncluded(
+                  key.toolchainTypes().stream()
+                      .map(ToolchainTypeRequirement::toolchainType)
+                      .map(Label::toString)
+                      .collect(toImmutableSet()));
 
       ToolchainResolutionDebugPrinter debugPrinter =
-          ToolchainResolutionDebugPrinter.create(debug, env.getListener());
+          ToolchainResolutionDebugPrinter.create(
+              debug,
+              platformOptions.toolchainResolutionDetails,
+              env.getListener(),
+              ToolchainResolutionDetails.builder());
 
       // Create keys for all platforms that will be used, and validate them early.
       // Do this early, to catch platform errors early.

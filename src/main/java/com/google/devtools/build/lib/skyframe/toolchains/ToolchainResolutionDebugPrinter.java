@@ -21,18 +21,27 @@ import com.google.common.collect.ImmutableSetMultimap;
 import com.google.devtools.build.lib.analysis.platform.ConstraintValueInfo;
 import com.google.devtools.build.lib.analysis.platform.ToolchainTypeInfo;
 import com.google.devtools.build.lib.cmdline.Label;
+import com.google.devtools.build.lib.buildevent.ToolchainResolutionDetails;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.errorprone.annotations.FormatMethod;
 import com.google.errorprone.annotations.FormatString;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /** A helper interface for printing debug messages from toolchain resolution. */
 public sealed interface ToolchainResolutionDebugPrinter {
 
-  static ToolchainResolutionDebugPrinter create(boolean debug, ExtendedEventHandler eventHandler) {
+  static ToolchainResolutionDebugPrinter create(
+      boolean debug,
+      boolean event,
+      ExtendedEventHandler eventHandler,
+      @Nullable ToolchainResolutionDetails.Builder detailsBuilder) {
     if (debug) {
       return new EventHandlerImpl(eventHandler);
+    }
+    if (event) {
+      return new BuildEventImpl(eventHandler, detailsBuilder);
     }
     return new NoopPrinter();
   }
@@ -136,6 +145,46 @@ public sealed interface ToolchainResolutionDebugPrinter {
               "ToolchainResolution: Rejected execution platform %s; %s", toolchainLabel, message);
         }
       }
+    }
+  }
+
+  /** Implement debug printing by creating a {@link ToolchainResolutionDetails} build event. */
+  final class BuildEventImpl implements ToolchainResolutionDebugPrinter {
+    private final ExtendedEventHandler eventHandler;
+    private final ToolchainResolutionDetails.Builder details;
+
+    private BuildEventImpl(
+        ExtendedEventHandler eventHandler, ToolchainResolutionDetails.Builder details) {
+      this.eventHandler = eventHandler;
+      this.details = details;
+    }
+
+    @Override
+    public boolean debugEnabled() {
+      return true;
+    }
+
+    @Override
+    public void reportSelectedToolchains(
+        Label targetPlatform,
+        Label executionPlatform,
+        ImmutableSetMultimap<ToolchainTypeInfo, Label> toolchainTypeToResolved) {
+      details.setTargetPlatform(targetPlatform);
+      details.setExecutionPlatform(executionPlatform);
+      details.setResolvedToolchains(toolchainTypeToResolved);
+      eventHandler.post(details.build());
+    }
+
+    @Override
+    public void reportRemovedExecutionPlatform(
+        Label label, ImmutableList<ConstraintValueInfo> missingConstraints) {
+      // This is not reported in the build event.
+    }
+
+    @Override
+    public void reportRejectedExecutionPlatforms(
+        ImmutableMap<Label, String> rejectedExecutionPlatforms) {
+      details.setRejectedExecutionPlatforms(rejectedExecutionPlatforms);
     }
   }
 }

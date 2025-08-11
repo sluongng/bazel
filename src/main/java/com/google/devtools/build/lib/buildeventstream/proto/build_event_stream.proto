@@ -259,6 +259,9 @@ message BuildEventId {
   // Identifier of an event providing the ExecRequest of a run command.
   message ExecRequestId {}
 
+  // Identifier of an event providing the toolchain resolution information.
+  message ToolchainResolutionId {}
+
   reserved 27;
 
   oneof id {
@@ -290,6 +293,7 @@ message BuildEventId {
     BuildMetadataId build_metadata = 24;
     ConvenienceSymlinksIdentifiedId convenience_symlinks_identified = 25;
     ExecRequestId exec_request = 28;
+    ToolchainResolutionId toolchain_resolution = 30;
   }
 }
 
@@ -1479,5 +1483,29 @@ message BuildEvent {
     BuildMetadata build_metadata = 26;
     ConvenienceSymlinksIdentified convenience_symlinks_identified = 27;
     ExecRequestConstructed exec_request = 29;
+    ToolchainResolution toolchain_resolution = 31;
   }
+}
+
+// Event describing the results of toolchain resolution.
+message ToolchainResolution {
+  // The platform that the build rule is being built for.
+  string target_platform = 1;
+
+  // The platform that the build actions are being executed on.
+  string execution_platform = 2;
+
+  message Toolchain {
+    string toolchain_type = 1;
+    string toolchain = 2;
+  }
+  // The toolchains that were chosen for this build.
+  repeated Toolchain toolchains = 3;
+
+  message RejectedPlatform {
+    string rejected_platform = 1;
+    string reason = 2;
+  }
+  // A map from the labels of rejected execution platforms to the reason they were rejected.
+  repeated RejectedPlatform rejected_platforms = 4;
 }
