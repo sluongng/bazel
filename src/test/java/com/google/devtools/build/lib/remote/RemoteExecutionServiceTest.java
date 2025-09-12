@@ -3097,6 +3097,7 @@ public class RemoteExecutionServiceTest {
         digestUtil,
         remoteOptions,
         Options.getDefaults(ExecutionOptions.class),
+        com.google.common.collect.ImmutableSet.of(),
         cache,
         executor,
         tempPathGenerator,

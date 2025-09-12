@@ -302,6 +302,7 @@ public class RemoteSpawnCacheTest {
                 digestUtil,
                 options,
                 executionOptions,
+                com.google.common.collect.ImmutableSet.of(),
                 combinedCache,
                 null,
                 tempPathGenerator,

@@ -116,6 +116,78 @@ function test_cc_tree_prefetching_download_minimal() {
       || fail "Failed to build //a:tree_cc with prefetching and minimal downloads"
 }
 
+# Verifies that stdout/stderr of successful remote actions are not downloaded/printed
+# when the UI would not show them (pre-filtered by --ui_event_filters and --output_filter).
+function test_skip_stdout_stderr_when_ui_filters_hide_success() {
+  mkdir -p a
+  cat > a/BUILD <<'EOF'
+genrule(
+  name = "foo",
+  srcs = [],
+  outs = ["foo.txt"],
+  cmd = """
+echo some_stdout
+echo some_stderr 1>&2
+touch $@
+""",
+)
+EOF
+
+  # Baseline: with default UI settings, logs from a successful action are printed.
+  bazel build \
+    --remote_executor=grpc://localhost:${worker_port} \
+    //a:foo >& $TEST_log || fail "Failed to build //a:foo (baseline)"
+  expect_log "some_stdout"
+  expect_log "some_stderr"
+
+  bazel clean >& $TEST_log || fail "Failed to clean"
+
+  # Hide INFO events: successful action logs should not be printed.
+  bazel build \
+    --remote_executor=grpc://localhost:${worker_port} \
+    --ui_event_filters=-info \
+    //a:foo >& $TEST_log || fail "Failed to build //a:foo with --ui_event_filters"
+  expect_not_log "some_stdout"
+  expect_not_log "some_stderr"
+
+  bazel clean >& $TEST_log || fail "Failed to clean"
+
+  # Exclude by output_filter: successful action logs should not be printed.
+  # DONT_MATCH_ANYTHING is documented to match nothing.
+  bazel build \
+    --remote_executor=grpc://localhost:${worker_port} \
+    --output_filter=DONT_MATCH_ANYTHING \
+    //a:foo >& $TEST_log || fail "Failed to build //a:foo with --output_filter"
+  expect_not_log "some_stdout"
+  expect_not_log "some_stderr"
+}
+
+# Verifies that on failures we still download/print remote stdout/stderr even if INFO is hidden.
+function test_failure_always_prints_logs_even_if_info_hidden() {
+  mkdir -p a
+  cat > a/BUILD <<'EOF'
+genrule(
+  name = "failme",
+  srcs = [],
+  outs = ["x.txt"],
+  cmd = """
+echo will_print_stdout
+echo will_print_stderr 1>&2
+exit 1
+""",
+)
+EOF
+
+  # Build is expected to fail; ensure logs are printed despite INFO suppression.
+  bazel build \
+    --remote_executor=grpc://localhost:${worker_port} \
+    --ui_event_filters=-info \
+    //a:failme >& $TEST_log && fail "Build should fail" || true
+
+  expect_log "will_print_stdout"
+  expect_log "will_print_stderr"
+}
+
 function test_cc_include_scanning_and_minimal_downloads() {
   add_rules_cc MODULE.bazel
   cat > BUILD <<'EOF'

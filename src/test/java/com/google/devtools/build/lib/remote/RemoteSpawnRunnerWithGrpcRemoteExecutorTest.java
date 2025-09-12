@@ -348,6 +348,7 @@ public class RemoteSpawnRunnerWithGrpcRemoteExecutorTest {
             DIGEST_UTIL,
             remoteOptions,
             Options.getDefaults(ExecutionOptions.class),
+            com.google.common.collect.ImmutableSet.of(),
             remoteCache,
             executor,
             tempPathGenerator,

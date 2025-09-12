@@ -24,6 +24,7 @@ import com.google.devtools.build.lib.exec.ModuleActionContextRegistry;
 import com.google.devtools.build.lib.exec.SpawnCache;
 import com.google.devtools.build.lib.exec.SpawnStrategyRegistry;
 import com.google.devtools.build.lib.packages.semantics.BuildLanguageOptions;
+import com.google.devtools.build.lib.runtime.UiOptions;
 import com.google.devtools.build.lib.remote.common.RemoteExecutionClient;
 import com.google.devtools.build.lib.remote.common.RemotePathResolver;
 import com.google.devtools.build.lib.remote.common.RemotePathResolver.DefaultRemotePathResolver;
@@ -163,6 +164,7 @@ final class RemoteActionContextProvider {
     if (remoteExecutionService == null) {
       Path workingDirectory = env.getWorkingDirectory();
       RemoteOptions remoteOptions = checkNotNull(env.getOptions().getOptions(RemoteOptions.class));
+      UiOptions uiOptions = checkNotNull(env.getOptions().getOptions(UiOptions.class));
       Path captureCorruptedOutputsDir = null;
       if (remoteOptions.remoteCaptureCorruptedOutputs != null
           && !remoteOptions.remoteCaptureCorruptedOutputs.isEmpty()) {
@@ -184,6 +186,7 @@ final class RemoteActionContextProvider {
               digestUtil,
               checkNotNull(env.getOptions().getOptions(RemoteOptions.class)),
               checkNotNull(env.getOptions().getOptions(ExecutionOptions.class)),
+              uiOptions.getFilteredEventKinds(),
               combinedCache,
               remoteExecutor,
               tempPathGenerator,

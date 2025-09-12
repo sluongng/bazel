@@ -83,6 +83,8 @@ import com.google.devtools.build.lib.analysis.platform.PlatformUtils;
 import com.google.devtools.build.lib.buildtool.buildevent.BuildCompleteEvent;
 import com.google.devtools.build.lib.buildtool.buildevent.BuildInterruptedEvent;
 import com.google.devtools.build.lib.events.Event;
+import com.google.devtools.build.lib.events.EventKind;
+import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.events.Reporter;
 import com.google.devtools.build.lib.exec.ExecutionOptions;
 import com.google.devtools.build.lib.exec.SpawnInputExpander.InputWalker;
@@ -191,6 +193,7 @@ public class RemoteExecutionService {
   private final DigestUtil digestUtil;
   private final RemoteOptions remoteOptions;
   private final ExecutionOptions executionOptions;
+  private final ImmutableSet<EventKind> filteredEventKinds;
   @Nullable private final CombinedCache combinedCache;
   @Nullable private final RemoteExecutionClient remoteExecutor;
   private final TempPathGenerator tempPathGenerator;
@@ -223,6 +226,7 @@ public class RemoteExecutionService {
       DigestUtil digestUtil,
       RemoteOptions remoteOptions,
       ExecutionOptions executionOptions,
+      ImmutableSet<EventKind> filteredEventKinds,
       @Nullable CombinedCache combinedCache,
       @Nullable RemoteExecutionClient remoteExecutor,
       TempPathGenerator tempPathGenerator,
@@ -239,6 +243,7 @@ public class RemoteExecutionService {
     this.digestUtil = digestUtil;
     this.remoteOptions = remoteOptions;
     this.executionOptions = executionOptions;
+    this.filteredEventKinds = filteredEventKinds;
     this.combinedCache = combinedCache;
     this.remoteExecutor = remoteExecutor;
 
@@ -1425,12 +1430,14 @@ public class RemoteExecutionService {
 
     FileOutErr outErr = action.getSpawnExecutionContext().getFileOutErr();
 
-    // Always download the action stdout/stderr.
+    // Conditionally download the action stdout/stderr if the UI is expected to show them.
     FileOutErr tmpOutErr = outErr.childOutErr();
-    List<ListenableFuture<Void>> outErrDownloads =
-        combinedCache.downloadOutErr(context, result.actionResult, tmpOutErr);
-    for (ListenableFuture<Void> future : outErrDownloads) {
-      downloadsBuilder.add(transform(future, (v) -> null, directExecutor()));
+    if (shouldMaterializeOutErr(action, /*success=*/ result.getExitCode() == 0)) {
+      List<ListenableFuture<Void>> outErrDownloads =
+          combinedCache.downloadOutErr(context, result.actionResult, tmpOutErr);
+      for (ListenableFuture<Void> future : outErrDownloads) {
+        downloadsBuilder.add(transform(future, (v) -> null, directExecutor()));
+      }
     }
 
     ImmutableList<ListenableFuture<FileMetadata>> downloads = downloadsBuilder.build();
@@ -1529,6 +1536,38 @@ public class RemoteExecutionService {
     }
 
     return null;
+  }
+
+  /**
+   * Decide whether to fetch stdout/stderr bytes for a remote action based on whether the UI is
+   * likely to display them.
+   *
+   * <p>Rules:
+   * - Always fetch on failure.
+   * - Fetch on success if the underlying Action shows output unconditionally (e.g., tests).
+   * - Otherwise, if INFO events are filtered via --ui_event_filters, skip.
+   * - Otherwise, honor --output_filter via Reporter.showOutput(label).
+   */
+  private boolean shouldMaterializeOutErr(RemoteAction action, boolean success) {
+    if (!success) {
+      return true;
+    }
+
+    var owner = action.getSpawn().getResourceOwner();
+    if (owner instanceof com.google.devtools.build.lib.actions.Action act
+        && act.showsOutputUnconditionally()) {
+      return true;
+    }
+
+    if (filteredEventKinds.contains(EventKind.INFO)) {
+      return false;
+    }
+
+    var targetLabel = action.getSpawn().getTargetLabel();
+    if (targetLabel == null) {
+      return true; // No label to test against output_filter: be permissive.
+    }
+    return reporter.showOutput(Label.print(targetLabel));
   }
 
   /** An ongoing local execution of a spawn. */
