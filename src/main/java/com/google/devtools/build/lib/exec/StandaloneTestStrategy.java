@@ -844,11 +844,11 @@ public class StandaloneTestStrategy extends TestStrategy {
 
     Path xmlOutputPath = resolvedPaths.getXmlOutputPath();
 
-    // If the test did not create a test.xml, then we run a separate action to create a test.xml
-    // from test.log. We do this as a spawn rather than doing it locally in-process, as the test.log
-    // file may only exist remotely (when remote execution is enabled), and we do not want to have
-    // to download it.
-    if (fileOutErr.getOutputPath().exists() && !xmlOutputPath.exists()) {
+    // If the test did not create a test.xml, run a separate action to create it from test.log.
+    // Important: Do not require local existence of test.log here. In remote execution, test.log
+    // may only exist in CAS; the XML generation spawn declares test.log as an input via
+    // withOutputsAsInputs and can fetch it remotely without client-side materialization.
+    if (!xmlOutputPath.exists()) {
       Spawn xmlGeneratingSpawn =
           createXmlGeneratingSpawn(testAction, spawn.getEnvironment(), spawnResults.get(0));
       SpawnStrategyResolver spawnStrategyResolver =
