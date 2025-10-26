@@ -141,3 +141,24 @@ sh_test(
         "@bazel_tools//tools/bash/runfiles",
     ],
 )
+
+sh_test(
+    name = "remote_analysis_cache_grpc_test",
+    size = "medium",
+    srcs = ["remote_analysis_cache_grpc_test.sh"],
+    data = [
+        ":remote_utils",
+        "//src/test/java/com/google/devtools/build/lib/skyframe/serialization/analysis:MockRemoteAnalysisCacheServer",
+        "//src/test/shell/bazel:test-deps",
+        "@bazel_tools//tools/bash/runfiles",
+    ],
+    env = {
+        "JAVA_ROOTPATH": "$(JAVA_ROOTPATH)",
+    },
+    toolchains = [
+        "@rules_java//toolchains:current_java_runtime",
+    ],
+    tags = [
+        "no_windows",  # mock server relies on nc for readiness polling
+    ],
+)

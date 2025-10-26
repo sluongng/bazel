@@ -35,6 +35,7 @@ import com.google.devtools.build.lib.exec.BinTools;
 import com.google.devtools.build.lib.runtime.BlazeRuntime;
 import com.google.devtools.build.lib.runtime.BlazeWorkspace;
 import com.google.devtools.build.lib.runtime.CommandEnvironment;
+import com.google.devtools.build.lib.runtime.DiffWorkspaceVersionProvider;
 import com.google.devtools.build.lib.sandbox.AsynchronousTreeDeleter;
 import com.google.devtools.build.lib.util.AbruptExitException;
 import com.google.devtools.build.lib.vfs.DigestHashFunction;
@@ -321,6 +322,7 @@ public class WorkerModuleTest {
             /* syscallCache= */ null,
             /* analysisCodecRegistrySupplier= */ null,
             /* fingerprintValueServiceFactory= */ null,
+            DiffWorkspaceVersionProvider.INSTANCE,
             /* allowExternalRepositories= */ true);
     when(env.getBlazeWorkspace()).thenReturn(blazeWorkspace);
     when(env.getDirectories()).thenReturn(blazeDirectories);

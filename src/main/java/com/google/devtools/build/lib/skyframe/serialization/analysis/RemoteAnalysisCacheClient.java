@@ -16,6 +16,7 @@ package com.google.devtools.build.lib.skyframe.serialization.analysis;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.devtools.build.lib.events.EventHandler;
+import com.google.devtools.build.lib.skyframe.serialization.FrontierNodeVersion;
 import com.google.protobuf.ByteString;
 import java.util.Collection;
 
@@ -28,8 +29,13 @@ public interface RemoteAnalysisCacheClient {
   /** Usage statistics. */
   record Stats(long bytesSent, long bytesReceived, long requestsSent, long batches) {}
 
-  /** Looks up an entry in the remote analysis cache based on a serialized key. */
-  ListenableFuture<ByteString> lookup(ByteString key);
+  /**
+   * Looks up an entry in the remote analysis cache based on a serialized key fingerprint.
+   *
+   * @param fingerprint The fingerprint computed from the SkyKey and {@link FrontierNodeVersion}.
+   * @param version The version metadata describing the serialized SkyValue.
+   */
+  ListenableFuture<ByteString> lookup(ByteString fingerprint, FrontierNodeVersion version);
 
   /** Returns the usage statistics. */
   Stats getStats();

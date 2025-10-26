@@ -102,6 +102,7 @@ import com.google.devtools.build.lib.runtime.InstrumentationOutput;
 import com.google.devtools.build.lib.runtime.InstrumentationOutputFactory.DestinationRelativeTo;
 import com.google.devtools.build.lib.runtime.StarlarkOptionsParser;
 import com.google.devtools.build.lib.runtime.StarlarkOptionsParser.BuildSettingLoader;
+import com.google.devtools.build.lib.runtime.WorkspaceVersionInfo;
 import com.google.devtools.build.lib.server.FailureDetails.ActionQuery;
 import com.google.devtools.build.lib.server.FailureDetails.BuildConfiguration.Code;
 import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
@@ -129,6 +130,7 @@ import com.google.devtools.build.lib.skyframe.serialization.SkyValueRetriever.Re
 import com.google.devtools.build.lib.skyframe.serialization.SkycacheMetadataParams;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.AnalysisCacheInvalidator;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId.GitClientId;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId.LongVersionClientId;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.FrontierSerializer;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCacheClient;
@@ -1260,6 +1262,7 @@ public class BuildTool {
     private final HashCode blazeInstallMD5;
     @Nullable private final String distinguisher;
     private final boolean useFakeStampData;
+    private final WorkspaceVersionInfo workspaceVersionInfo;
 
     /** Cache lookup parameter requiring integration with external version control. */
     private final IntVersion evaluatingVersion;
@@ -1489,16 +1492,22 @@ public class BuildTool {
       this.distinguisher = options.analysisCacheKeyDistinguisherForTesting;
       this.useFakeStampData = env.getUseFakeStampData();
 
-      var workspaceInfoFromDiff = env.getWorkspaceInfoFromDiff();
-      if (workspaceInfoFromDiff == null) {
-        // If there is no workspace info, we cannot confidently version the nodes. Use the min
-        // version as a sentinel.
-        this.evaluatingVersion = IntVersion.of(Long.MIN_VALUE);
-        this.snapshot = Optional.empty();
-      } else {
-        this.evaluatingVersion = workspaceInfoFromDiff.getEvaluatingVersion();
-        this.snapshot = workspaceInfoFromDiff.getSnapshot();
+      WorkspaceVersionInfo workspaceVersionInfo =
+          env.getBlazeWorkspace().getWorkspaceVersionProvider().getWorkspaceVersion(env);
+      this.evaluatingVersion =
+          workspaceVersionInfo.evaluatingVersion().orElse(IntVersion.of(Long.MIN_VALUE));
+      this.workspaceVersionInfo = workspaceVersionInfo;
+      Optional<ClientId> maybeClientId = workspaceVersionInfo.clientId();
+      if (maybeClientId.isEmpty()) {
+        maybeClientId =
+            workspaceVersionInfo
+                .revision()
+                .map(
+                    revision ->
+                        (ClientId)
+                            new GitClientId(revision, workspaceVersionInfo.hasLocalChanges()));
       }
+      this.snapshot = maybeClientId;
       RemoteAnalysisCachingServicesSupplier servicesSupplier =
           env.getBlazeWorkspace().remoteAnalysisCachingServicesSupplier();
       ClientId clientId =
@@ -1597,6 +1606,8 @@ public class BuildTool {
                     evaluatingVersion,
                     nullToEmpty(distinguisher),
                     useFakeStampData,
+                    workspaceVersionInfo.revision(),
+                    workspaceVersionInfo.hasLocalChanges(),
                     snapshot);
             logger.atInfo().log(
                 "Remote analysis caching SkyValue version: %s (actual evaluating version: %s)",

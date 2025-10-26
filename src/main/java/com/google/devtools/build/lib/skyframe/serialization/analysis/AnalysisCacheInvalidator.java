@@ -155,7 +155,7 @@ public final class AnalysisCacheInvalidator {
 
       // 2. Submit the fingerprint to the analysis cache service
       ListenableFuture<ByteString> responseFuture =
-          analysisCacheClient.lookup(ByteString.copyFrom(cacheKey.toBytes()));
+          analysisCacheClient.lookup(ByteString.copyFrom(cacheKey.toBytes()), currentVersion);
 
       // 3. Transform result to return keys that should be invalidated (i.e.
       // empty response, cache miss)

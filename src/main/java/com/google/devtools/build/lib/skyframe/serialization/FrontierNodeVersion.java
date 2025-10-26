@@ -34,6 +34,8 @@ public final class FrontierNodeVersion {
           IntVersion.of(9000),
           "distinguisher",
           /* useFakeStampData= */ true,
+          Optional.of("deadbeef"),
+          /* hasLocalChanges= */ false,
           Optional.of(new SnapshotClientId("for_testing", 123)));
 
   // Fingerprints of version components.
@@ -43,6 +45,10 @@ public final class FrontierNodeVersion {
   private final byte[] blazeInstallMD5Fingerprint;
   private final long evaluatingVersion;
   private final byte[] evaluatingVersionFingerprint;
+
+  private final Optional<String> revision;
+  private final byte[] revisionFingerprint;
+  private final boolean hasLocalChanges;
 
   // Fingerprint of the distinguisher for allowing test cases to share a
   // static cache.
@@ -61,6 +67,8 @@ public final class FrontierNodeVersion {
       IntVersion evaluatingVersion,
       String distinguisherBytesForTesting,
       boolean useFakeStampData,
+      Optional<String> revision,
+      boolean hasLocalChanges,
       Optional<ClientId> clientId) {
     this.topLevelConfigChecksum = topLevelConfigChecksum;
     this.topLevelConfigFingerprint = topLevelConfigChecksum.getBytes(UTF_8);
@@ -70,13 +78,18 @@ public final class FrontierNodeVersion {
     this.evaluatingVersionFingerprint = Longs.toByteArray(evaluatingVersion.getVal());
     this.distinguisherBytesForTesting = distinguisherBytesForTesting.getBytes(UTF_8);
     this.useFakeStampData = useFakeStampData;
+    this.revision = revision;
+    this.revisionFingerprint = revision.orElse("").getBytes(UTF_8);
+    this.hasLocalChanges = hasLocalChanges;
     this.precomputedFingerprint =
         Bytes.concat(
             this.topLevelConfigFingerprint,
             this.blazeInstallMD5Fingerprint,
             this.evaluatingVersionFingerprint,
             this.distinguisherBytesForTesting,
-            this.useFakeStampData ? new byte[] {1} : new byte[] {0});
+            this.useFakeStampData ? new byte[] {1} : new byte[] {0},
+            this.revisionFingerprint,
+            hasLocalChanges ? new byte[] {1} : new byte[] {0});
 
     // This is undigested.
     this.clientId = clientId;
@@ -96,6 +109,14 @@ public final class FrontierNodeVersion {
     return topLevelConfigFingerprint;
   }
 
+  public Optional<String> getRevision() {
+    return revision;
+  }
+
+  public boolean hasLocalChanges() {
+    return hasLocalChanges;
+  }
+
   public byte[] getPrecomputedFingerprint() {
     return precomputedFingerprint;
   }
@@ -111,6 +132,8 @@ public final class FrontierNodeVersion {
         .add("blazeInstall", Arrays.hashCode(blazeInstallMD5Fingerprint))
         .add("evaluatingVersion", Arrays.hashCode(evaluatingVersionFingerprint))
         .add("distinguisherBytesForTesting", Arrays.hashCode(distinguisherBytesForTesting))
+        .add("revision", revision.orElse(""))
+        .add("hasLocalChanges", hasLocalChanges)
         .add("useFakeStampData", useFakeStampData)
         .add("precomputed", hashCode())
         .toString();
@@ -146,5 +169,9 @@ public final class FrontierNodeVersion {
 
   public String getTopLevelConfigChecksum() {
     return topLevelConfigChecksum;
+  }
+
+  public String getDistinguisher() {
+    return new String(distinguisherBytesForTesting, UTF_8);
   }
 }

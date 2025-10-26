@@ -78,7 +78,6 @@ public final class SkyValueRetrieverTest {
 
   private ObjectCodecs codecs = new ObjectCodecs();
 
-
   private enum InitialQueryCases {
     IMMEDIATE_EMPTY_VALUE,
     IMMEDIATE_MISSING_VALUE,
@@ -308,6 +307,8 @@ public final class SkyValueRetrieverTest {
             /* evaluatingVersion= */ IntVersion.of(9000),
             /* distinguisherBytesForTesting= */ "distinguisher",
             /* useFakeStampData= */ true,
+            /* revision= */ Optional.empty(),
+            /* hasLocalChanges= */ false,
             /* clientId= */ Optional.of(new SnapshotClientId("for/testing", 123)));
     uploadKeyValuePair(key, version, value, fingerprintValueService);
 
@@ -339,6 +340,8 @@ public final class SkyValueRetrieverTest {
             /* evaluatingVersion= */ IntVersion.of(1234),
             /* distinguisherBytesForTesting= */ "distinguisher",
             /* useFakeStampData= */ true,
+            /* revision= */ Optional.empty(),
+            /* hasLocalChanges= */ false,
             /* clientId= */ Optional.of(new SnapshotClientId("for/testing", 123)));
     uploadKeyValuePair(key, version, value, fingerprintValueService);
 
@@ -357,6 +360,8 @@ public final class SkyValueRetrieverTest {
                 /* evaluatingVersion= */ IntVersion.of(5678),
                 /* distinguisherBytesForTesting= */ "distinguisher",
                 /* useFakeStampData= */ true,
+                /* revision= */ Optional.empty(),
+                /* hasLocalChanges= */ false,
                 /* clientId= */ Optional.of(new SnapshotClientId("for/testing", 123))));
 
     assertThat(result).isSameInstanceAs(NO_CACHED_DATA);
@@ -799,6 +804,8 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(9000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.empty());
     var second =
         new FrontierNodeVersion(
@@ -807,6 +814,8 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(9000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.empty());
 
     assertThat(first.getPrecomputedFingerprint()).isEqualTo(second.getPrecomputedFingerprint());
@@ -822,6 +831,8 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(9000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.empty());
     var second =
         new FrontierNodeVersion(
@@ -830,6 +841,8 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(9000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.empty());
 
     assertThat(first.getPrecomputedFingerprint()).isNotEqualTo(second.getPrecomputedFingerprint());
@@ -845,6 +858,8 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(9000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.empty());
     var second =
         new FrontierNodeVersion(
@@ -853,6 +868,8 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(9000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.empty());
 
     assertThat(first.getPrecomputedFingerprint()).isNotEqualTo(second.getPrecomputedFingerprint());
@@ -868,6 +885,8 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(9000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.empty());
     var second =
         new FrontierNodeVersion(
@@ -876,6 +895,8 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(10000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.empty());
 
     assertThat(first.getPrecomputedFingerprint()).isNotEqualTo(second.getPrecomputedFingerprint());
@@ -891,10 +912,19 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(9000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.empty());
     var second =
         new FrontierNodeVersion(
-            "foo", HashCode.fromInt(42), IntVersion.of(9000), "changed", true, Optional.empty());
+            "foo",
+            HashCode.fromInt(42),
+            IntVersion.of(9000),
+            "changed",
+            true,
+            Optional.empty(),
+            false,
+            Optional.empty());
     assertThat(first.getPrecomputedFingerprint()).isNotEqualTo(second.getPrecomputedFingerprint());
     assertThat(first).isNotEqualTo(second);
   }
@@ -908,6 +938,8 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(9000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.empty());
     var second =
         new FrontierNodeVersion(
@@ -915,6 +947,8 @@ public final class SkyValueRetrieverTest {
             HashCode.fromInt(42),
             IntVersion.of(9000),
             "distinguisher",
+            false,
+            Optional.empty(),
             false,
             Optional.empty());
     assertThat(first.getPrecomputedFingerprint()).isNotEqualTo(second.getPrecomputedFingerprint());
@@ -930,6 +964,8 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(9000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.of(new SnapshotClientId("changed", 123)));
     var second =
         new FrontierNodeVersion(
@@ -938,6 +974,8 @@ public final class SkyValueRetrieverTest {
             IntVersion.of(9000),
             "distinguisher",
             true,
+            Optional.empty(),
+            false,
             Optional.empty());
 
     assertThat(first.getPrecomputedFingerprint()).isNotEqualTo(second.getPrecomputedFingerprint());
@@ -1011,7 +1049,7 @@ public final class SkyValueRetrieverTest {
   private static RemoteAnalysisCacheClient createFakeAnalysisCacheClient(
       Map<ByteString, ByteString> data) {
     RemoteAnalysisCacheClient result = mock(RemoteAnalysisCacheClient.class);
-    when(result.lookup(any()))
+    when(result.lookup(any(ByteString.class), any(FrontierNodeVersion.class)))
         .thenAnswer(
             invocation -> {
               ByteString key = invocation.getArgument(0);
@@ -1030,7 +1068,7 @@ public final class SkyValueRetrieverTest {
       Consumer<SettableFuture<ByteString>> capturer) {
     RemoteAnalysisCacheClient result = mock(RemoteAnalysisCacheClient.class);
 
-    when(result.lookup(any()))
+    when(result.lookup(any(ByteString.class), any(FrontierNodeVersion.class)))
         .thenAnswer(
             invocation -> {
               var settable = SettableFuture.<ByteString>create();

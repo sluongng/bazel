@@ -89,6 +89,8 @@ public final class BlazeWorkspace {
   @Nullable
   private final RemoteAnalysisCachingServicesSupplier remoteAnalysisCachingServicesSupplier;
 
+  private final WorkspaceVersionProvider workspaceVersionProvider;
+
   /**
    * The action cache, or null if it hasn't been loaded yet.
    *
@@ -164,6 +166,7 @@ public final class BlazeWorkspace {
       SyscallCache syscallCache,
       Supplier<ObjectCodecRegistry> analysisCodecRegistrySupplier,
       @Nullable RemoteAnalysisCachingServicesSupplier remoteAnalysisCachingServicesSupplier,
+      WorkspaceVersionProvider workspaceVersionProvider,
       boolean allowExternalRepositories) {
     this.runtime = runtime;
     this.eventBusExceptionHandler = Preconditions.checkNotNull(eventBusExceptionHandler);
@@ -179,6 +182,7 @@ public final class BlazeWorkspace {
     this.virtualPackageLocator = createPackageLocatorIfVirtual(directories, skyframeExecutor);
     this.analysisCodecRegistrySupplier = analysisCodecRegistrySupplier;
     this.remoteAnalysisCachingServicesSupplier = remoteAnalysisCachingServicesSupplier;
+    this.workspaceVersionProvider = workspaceVersionProvider;
 
     if (directories.inWorkspace()) {
       writeOutputBaseReadmeFile();
@@ -194,11 +198,13 @@ public final class BlazeWorkspace {
     return runtime;
   }
 
-  /**
-   * Returns the Blaze directories object for this runtime.
-   */
+  /** Returns the Blaze directories object for this runtime. */
   public BlazeDirectories getDirectories() {
     return directories;
+  }
+
+  public WorkspaceVersionProvider getWorkspaceVersionProvider() {
+    return workspaceVersionProvider;
   }
 
   public SkyframeExecutor getSkyframeExecutor() {
@@ -216,17 +222,16 @@ public final class BlazeWorkspace {
   /**
    * Returns the working directory of the server.
    *
-   * <p>This is often the first entry on the {@code --package_path}, but not always.
-   * Callers should certainly not make this assumption. The Path returned may be null.
+   * <p>This is often the first entry on the {@code --package_path}, but not always. Callers should
+   * certainly not make this assumption. The Path returned may be null.
    */
   public Path getWorkspace() {
     return directories.getWorkingDirectory();
   }
 
   /**
-   * Returns the output base directory associated with this Blaze server
-   * process. This is the base directory for shared Blaze state as well as tool
-   * and strategy specific subdirectories.
+   * Returns the output base directory associated with this Blaze server process. This is the base
+   * directory for shared Blaze state as well as tool and strategy specific subdirectories.
    */
   public Path getOutputBase() {
     return directories.getOutputBase();
@@ -288,9 +293,7 @@ public final class BlazeWorkspace {
             : null;
   }
 
-  /**
-   * Range that represents the last execution time of a build in millis since epoch.
-   */
+  /** Range that represents the last execution time of a build in millis since epoch. */
   @Nullable
   public Range<Long> getLastExecutionTimeRange() {
     return lastExecutionRange;
@@ -360,9 +363,7 @@ public final class BlazeWorkspace {
     skyframeExecutor.setEventBus(null);
   }
 
-  /**
-   * Reinitializes the Skyframe evaluator.
-   */
+  /** Reinitializes the Skyframe evaluator. */
   public void resetEvaluator() {
     skyframeExecutor.resetEvaluator();
   }
@@ -411,9 +412,9 @@ public final class BlazeWorkspace {
   }
 
   /**
-   * Generates a README file in the output base directory. This README file
-   * contains the name of the workspace directory, so that users can figure out
-   * which output base directory corresponds to which workspace.
+   * Generates a README file in the output base directory. This README file contains the name of the
+   * workspace directory, so that users can figure out which output base directory corresponds to
+   * which workspace.
    */
   private void writeOutputBaseReadmeFile() {
     Preconditions.checkNotNull(getWorkspace());

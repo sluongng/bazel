@@ -16,6 +16,7 @@ package com.google.devtools.build.lib.skyframe.serialization.analysis;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -86,7 +87,8 @@ public final class AnalysisCacheInvalidatorTest {
             objectCodecs, fingerprintService, key, frontierNodeVersion);
 
     // Simulate a cache hit by returning a non-empty response.
-    when(mockAnalysisCacheClient.lookup(ByteString.copyFrom(fingerprint.toBytes())))
+    when(mockAnalysisCacheClient.lookup(
+            eq(ByteString.copyFrom(fingerprint.toBytes())), eq(frontierNodeVersion)))
         .thenReturn(immediateFuture(ByteString.copyFromUtf8("some_value")));
 
     AnalysisCacheInvalidator invalidator =
@@ -114,7 +116,8 @@ public final class AnalysisCacheInvalidatorTest {
             objectCodecs, fingerprintService, key, frontierNodeVersion);
 
     // Simulate a cache miss by returning an empty response.
-    when(mockAnalysisCacheClient.lookup(ByteString.copyFrom(fingerprint.toBytes())))
+    when(mockAnalysisCacheClient.lookup(
+            eq(ByteString.copyFrom(fingerprint.toBytes())), eq(frontierNodeVersion)))
         .thenReturn(immediateFuture(ByteString.EMPTY));
 
     AnalysisCacheInvalidator invalidator =
@@ -147,9 +150,11 @@ public final class AnalysisCacheInvalidatorTest {
             objectCodecs, fingerprintService, missKey, frontierNodeVersion);
 
     // Simulate a cache hit _and_ miss for looking up multiple keys.
-    when(mockAnalysisCacheClient.lookup(ByteString.copyFrom(hitFingerprint.toBytes())))
+    when(mockAnalysisCacheClient.lookup(
+            eq(ByteString.copyFrom(hitFingerprint.toBytes())), eq(frontierNodeVersion)))
         .thenReturn(immediateFuture(ByteString.copyFromUtf8("some_value")));
-    when(mockAnalysisCacheClient.lookup(ByteString.copyFrom(missFingerprint.toBytes())))
+    when(mockAnalysisCacheClient.lookup(
+            eq(ByteString.copyFrom(missFingerprint.toBytes())), eq(frontierNodeVersion)))
         .thenReturn(immediateFuture(ByteString.EMPTY));
 
     AnalysisCacheInvalidator invalidator =
@@ -181,6 +186,8 @@ public final class AnalysisCacheInvalidatorTest {
             IntVersion.of(9000),
             "distinguisher",
             /* useFakeStampData= */ true,
+            Optional.empty(),
+            /* hasLocalChanges= */ false,
             Optional.of(new SnapshotClientId("for_testing", 123)));
     var currentVersion =
         new FrontierNodeVersion(
@@ -189,6 +196,8 @@ public final class AnalysisCacheInvalidatorTest {
             IntVersion.of(9001), // changed
             "distinguisher",
             /* useFakeStampData= */ true,
+            Optional.empty(),
+            /* hasLocalChanges= */ false,
             Optional.of(new SnapshotClientId("for_testing", 123)));
     AnalysisCacheInvalidator invalidator =
         new AnalysisCacheInvalidator(
@@ -207,7 +216,8 @@ public final class AnalysisCacheInvalidatorTest {
         .containsExactly(key1, key2);
 
     // No RPCs should be sent.
-    verify(mockAnalysisCacheClient, never()).lookup(any());
+    verify(mockAnalysisCacheClient, never())
+        .lookup(any(ByteString.class), any(FrontierNodeVersion.class));
   }
 
   private enum ClientIdTestCase {
@@ -255,7 +265,8 @@ public final class AnalysisCacheInvalidatorTest {
     PackedFingerprint packedFingerprint =
         SkyKeySerializationHelper.computeFingerprint(
             objectCodecs, fingerprintService, key, frontierNodeVersion);
-    when(mockAnalysisCacheClient.lookup(ByteString.copyFrom(packedFingerprint.toBytes())))
+    when(mockAnalysisCacheClient.lookup(
+            eq(ByteString.copyFrom(packedFingerprint.toBytes())), eq(frontierNodeVersion)))
         .thenReturn(immediateFuture(ByteString.EMPTY));
 
     AnalysisCacheInvalidator invalidator =

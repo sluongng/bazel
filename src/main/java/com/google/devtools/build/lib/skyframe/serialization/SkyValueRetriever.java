@@ -245,7 +245,8 @@ public final class SkyValueRetriever {
                 responseFuture = futureValueBytes;
               } else {
                 ListenableFuture<ByteString> futureResponseBytes =
-                    analysisCacheClient.lookup(ByteString.copyFrom(cacheKey.toBytes()));
+                    analysisCacheClient.lookup(
+                        ByteString.copyFrom(cacheKey.toBytes()), frontierNodeVersion);
 
                 serializationState = new WaitingForCacheServiceResponse(futureResponseBytes);
                 responseFuture = futureResponseBytes;

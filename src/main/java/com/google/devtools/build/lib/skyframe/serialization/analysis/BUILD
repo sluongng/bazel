@@ -258,10 +258,18 @@ java_library(
 
 java_library(
     name = "remote_analysis_cache_client",
-    srcs = ["RemoteAnalysisCacheClient.java"],
+    srcs = [
+        "GrpcRemoteAnalysisCacheClient.java",
+        "RemoteAnalysisCacheClient.java",
+    ],
     deps = [
+        ":client_id",
         "//src/main/java/com/google/devtools/build/lib/events",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization:frontier_node_version",
+        "//src/main/protobuf:remote_analysis_cache_java_grpc",
+        "//src/main/protobuf:remote_analysis_cache_java_proto",
         "//third_party:guava",
+        "//third_party/grpc-java:grpc-jar",
         "@com_google_protobuf//:protobuf_java",
     ],
 )

@@ -25,6 +25,7 @@ FILES = [
     "worker_protocol",
     "execution_graph",
     "file_invalidation_data",
+    "remote_analysis_cache",
 ]
 
 [proto_library(
@@ -283,6 +284,12 @@ java_proto_library(
 java_library_srcs(
     name = "remote_scrubbing_java_proto_srcs",
     deps = [":remote_scrubbing_java_proto"],
+)
+
+java_grpc_library(
+    name = "remote_analysis_cache_java_grpc",
+    srcs = [":remote_analysis_cache_proto"],
+    deps = [":remote_analysis_cache_java_proto"],
 )
 
 proto_library(

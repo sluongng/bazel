@@ -67,6 +67,8 @@ public final class WorkspaceBuilder {
   @Nullable
   private RemoteAnalysisCachingServicesSupplier remoteAnalysisCachingServicesSupplier = null;
 
+  @Nullable private WorkspaceVersionProvider workspaceVersionProvider = null;
+
   WorkspaceBuilder(BlazeDirectories directories, BinTools binTools) {
     this.directories = directories;
     this.binTools = binTools;
@@ -108,6 +110,11 @@ public final class WorkspaceBuilder {
               .setInitialCapacity(getSyscallCacheInitialCapacity())
               .build();
     }
+    if (workspaceVersionProvider == null) {
+      workspaceVersionProvider =
+          FallbackWorkspaceVersionProvider.of(
+              DiffWorkspaceVersionProvider.INSTANCE, GitWorkspaceVersionProvider.INSTANCE);
+    }
 
     SingleFileSystemSyscallCache singleFsSyscallCache =
         new SingleFileSystemSyscallCache(syscallCache, runtime.getFileSystem());
@@ -138,6 +145,7 @@ public final class WorkspaceBuilder {
         singleFsSyscallCache,
         analysisCodecRegistrySupplier,
         remoteAnalysisCachingServicesSupplier,
+        workspaceVersionProvider,
         allowExternalRepositories);
   }
 
@@ -186,6 +194,18 @@ public final class WorkspaceBuilder {
     Preconditions.checkState(
         this.syscallCache == null, "Set twice: %s %s", this.syscallCache, syscallCache);
     this.syscallCache = Preconditions.checkNotNull(syscallCache);
+    return this;
+  }
+
+  @CanIgnoreReturnValue
+  public WorkspaceBuilder setWorkspaceVersionProvider(
+      WorkspaceVersionProvider workspaceVersionProvider) {
+    Preconditions.checkState(
+        this.workspaceVersionProvider == null,
+        "At most one workspace version provider supported. But found two: %s and %s",
+        this.workspaceVersionProvider,
+        workspaceVersionProvider);
+    this.workspaceVersionProvider = Preconditions.checkNotNull(workspaceVersionProvider);
     return this;
   }
 

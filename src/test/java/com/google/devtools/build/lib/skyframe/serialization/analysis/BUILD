@@ -1,4 +1,4 @@
-load("@rules_java//java:defs.bzl", "java_library", "java_test")
+load("@rules_java//java:defs.bzl", "java_binary", "java_library", "java_test")
 
 package(
     default_applicable_licenses = ["//:license"],
@@ -97,6 +97,36 @@ java_test(
         "//third_party:junit4",
         "//third_party:mockito",
         "//third_party:truth",
+    ],
+)
+
+java_test(
+    name = "GrpcRemoteAnalysisCacheClientTest",
+    srcs = ["GrpcRemoteAnalysisCacheClientTest.java"],
+    deps = [
+        "//src/main/java/com/google/devtools/build/lib/events",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization:frontier_node_version",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis:remote_analysis_cache_client",
+        "//src/main/protobuf:remote_analysis_cache_java_grpc",
+        "//src/main/protobuf:remote_analysis_cache_java_proto",
+        "//third_party:guava",
+        "//third_party:junit4",
+        "//third_party:truth",
+        "//third_party/grpc-java:grpc-jar",
+        "@com_google_protobuf//java/core:lite_runtime_only",
+    ],
+)
+
+java_binary(
+    name = "MockRemoteAnalysisCacheServer",
+    srcs = ["testing/MockRemoteAnalysisCacheServer.java"],
+    deps = [
+        "//src/main/protobuf:remote_analysis_cache_java_grpc",
+        "//src/main/protobuf:remote_analysis_cache_java_proto",
+        "//third_party:guava",
+        "//third_party/grpc-java:grpc-jar",
+        "@com_google_protobuf//:protobuf_java",
     ],
 )
 

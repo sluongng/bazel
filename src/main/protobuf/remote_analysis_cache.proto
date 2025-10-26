@@ -1,0 +1,110 @@
+// Copyright 2025 The Bazel Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package remote.analysis;
+
+option java_multiple_files = true;
+option java_package = "com.google.devtools.build.lib.skyframe.serialization.analysis.proto";
+option java_outer_classname = "RemoteAnalysisCacheProto";
+
+message ClientIdentifier {
+  message Snapshot {
+    string workspace_id = 1;
+    int32 snapshot_version = 2;
+  }
+
+  message LongVersion {
+    int64 evaluating_version = 1;
+  }
+
+  message GitClient {
+    string revision = 1;
+    bool has_local_changes = 2;
+  }
+
+  oneof type {
+    Snapshot snapshot = 1;
+    LongVersion long_version = 2;
+    GitClient git_client = 3;
+  }
+}
+
+message FrontierVersion {
+  string top_level_config_checksum = 1;
+  bytes blaze_install_md5 = 2;
+  int64 evaluating_version = 3;
+  string distinguisher = 4;
+  bool use_fake_stamp_data = 5;
+
+  // Optional metadata about the workspace state when the cache entry was produced.
+  string revision = 6;
+  bool has_local_changes = 7;
+
+  ClientIdentifier client_id = 8;
+}
+
+message CacheKey {
+  FrontierVersion version = 1;
+  bytes serialized_skykey = 2;
+  // Precomputed fingerprint used as the primary lookup key.
+  bytes fingerprint = 3;
+}
+
+message LookupRequest {
+  CacheKey key = 1;
+}
+
+message LookupResponse {
+  // Serialized SkyValue bytes. Empty when the entry is not present.
+  bytes serialized_value = 1;
+  bool found = 2;
+}
+
+message AddTopLevelTargetsRequest {
+  string invocation_id = 1;
+  int64 evaluating_version = 2;
+  string configuration_hash = 3;
+  string bazel_version = 4;
+  string area = 5;
+  repeated string targets = 6;
+  repeated string config_flags = 7;
+}
+
+message AddTopLevelTargetsResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message LookupTopLevelTargetsRequest {
+  int64 evaluating_version = 1;
+  string configuration_hash = 2;
+  string bazel_version = 3;
+  string area = 4;
+  repeated string config_flags = 5;
+}
+
+message LookupTopLevelTargetsResponse {
+  repeated string targets = 1;
+  bool has_entries = 2;
+  string message = 3;
+}
+
+service RemoteAnalysisCache {
+  rpc Lookup(LookupRequest) returns (LookupResponse);
+  rpc AddTopLevelTargets(AddTopLevelTargetsRequest) returns (AddTopLevelTargetsResponse);
+  rpc LookupTopLevelTargets(LookupTopLevelTargetsRequest)
+      returns (LookupTopLevelTargetsResponse);
+}

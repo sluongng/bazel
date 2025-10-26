@@ -13,8 +13,6 @@
 // limitations under the License.
 package com.google.devtools.build.lib.skyframe.serialization.analysis;
 
-import com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId.LongVersionClientId;
-import com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId.SnapshotClientId;
 import com.google.errorprone.annotations.Immutable;
 
 /**
@@ -24,7 +22,8 @@ import com.google.errorprone.annotations.Immutable;
  * regardless of the particular requested keys.
  */
 @Immutable
-public sealed interface ClientId permits SnapshotClientId, LongVersionClientId {
+public sealed interface ClientId
+    permits ClientId.SnapshotClientId, ClientId.LongVersionClientId, ClientId.GitClientId {
   /**
    * A snapshot of the present workspace state as of this invocation.
    *
@@ -39,4 +38,12 @@ public sealed interface ClientId permits SnapshotClientId, LongVersionClientId {
    * @param evaluatingVersion a unique long identifier of this workspace
    */
   record LongVersionClientId(long evaluatingVersion) implements ClientId {}
+
+  /**
+   * Identifies a Git workspace by revision.
+   *
+   * @param revision the commit SHA used for this invocation
+   * @param hasLocalChanges whether uncommitted modifications were present
+   */
+  record GitClientId(String revision, boolean hasLocalChanges) implements ClientId {}
 }

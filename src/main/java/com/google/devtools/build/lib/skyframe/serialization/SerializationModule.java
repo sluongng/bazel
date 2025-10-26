@@ -17,15 +17,20 @@ import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static java.util.concurrent.ForkJoinPool.commonPool;
 
+import com.google.common.base.Strings;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.devtools.build.lib.analysis.BlazeDirectories;
 import com.google.devtools.build.lib.runtime.BlazeModule;
 import com.google.devtools.build.lib.runtime.BlazeRuntime;
 import com.google.devtools.build.lib.runtime.WorkspaceBuilder;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.GrpcRemoteAnalysisCacheClient;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCacheClient;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCachingOptions;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCachingServicesSupplier;
 import com.google.devtools.build.lib.util.DetailedExitCode;
 import com.google.errorprone.annotations.ForOverride;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -126,9 +131,96 @@ public class SerializationModule extends BlazeModule {
     private static final ListenableFuture<FingerprintValueService> WRAPPED_SERVICE_INSTANCE =
         immediateFuture(SERVICE_INSTANCE);
 
+    @Nullable private ManagedChannel managedChannel;
+    @Nullable private RemoteAnalysisCacheClient grpcClient;
+    @Nullable private ListenableFuture<RemoteAnalysisCacheClient> grpcClientFuture;
+
     @Override
     public ListenableFuture<FingerprintValueService> getFingerprintValueService() {
       return WRAPPED_SERVICE_INSTANCE;
+    }
+
+    @Override
+    public synchronized void configure(
+        RemoteAnalysisCachingOptions cachingOptions,
+        @Nullable com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId clientId,
+        String buildId,
+        @Nullable
+            com.google.devtools.build.lib.skyframe.serialization.analysis
+                    .RemoteAnalysisJsonLogWriter
+                jsonLogWriter) {
+      tearDownClient();
+      if (cachingOptions == null || !cachingOptions.mode.requiresBackendConnectivity()) {
+        return;
+      }
+
+      String target = chooseTarget(cachingOptions);
+      if (Strings.isNullOrEmpty(target)) {
+        return;
+      }
+      target = target.trim();
+      if (target.isEmpty()) {
+        return;
+      }
+
+      String normalizedTarget = normalizeGrpcTarget(target);
+      boolean usePlaintext = shouldUsePlaintextTransport(target);
+      ManagedChannelBuilder<?> builder = ManagedChannelBuilder.forTarget(normalizedTarget);
+      if (usePlaintext) {
+        builder.usePlaintext();
+      } else {
+        builder.useTransportSecurity();
+      }
+      managedChannel = builder.build();
+      grpcClient = new GrpcRemoteAnalysisCacheClient(managedChannel, cachingOptions.deadline);
+      grpcClientFuture = immediateFuture(grpcClient);
+    }
+
+    @Override
+    @Nullable
+    public synchronized ListenableFuture<RemoteAnalysisCacheClient> getAnalysisCacheClient() {
+      return grpcClientFuture;
+    }
+
+    private synchronized void tearDownClient() {
+      if (grpcClient != null) {
+        grpcClient.shutdown();
+        grpcClient = null;
+        grpcClientFuture = null;
+      }
+      if (managedChannel != null) {
+        managedChannel.shutdownNow();
+        managedChannel = null;
+      }
+    }
+
+    private static String chooseTarget(RemoteAnalysisCachingOptions options) {
+      if (!Strings.isNullOrEmpty(options.analysisCacheService)) {
+        return options.analysisCacheService;
+      }
+      return options.remoteAnalysisCache;
+    }
+
+    private static boolean shouldUsePlaintextTransport(String target) {
+      String lower = target.toLowerCase();
+      return !(lower.startsWith("grpcs://") || lower.startsWith("https://"));
+    }
+
+    private static String normalizeGrpcTarget(String target) {
+      String lower = target.toLowerCase();
+      if (lower.startsWith("grpcs://")) {
+        return target.substring("grpcs://".length());
+      }
+      if (lower.startsWith("grpc://")) {
+        return target.substring("grpc://".length());
+      }
+      if (lower.startsWith("https://")) {
+        return target.substring("https://".length());
+      }
+      if (lower.startsWith("http://")) {
+        return target.substring("http://".length());
+      }
+      return target;
     }
   }
 }
