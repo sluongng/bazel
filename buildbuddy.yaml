@@ -1,0 +1,29 @@
+actions:
+  - name: Test
+    container_image: ubuntu-24.04
+    resource_requests:
+      disk: 27GB
+    triggers:
+      push:
+        branches:
+          - "master"
+    steps:
+      # TODO(sluongng): enable more shell tests
+      #   Most of them should be RBE compatible,
+      #   but because some of them do requires additional attention.
+      #   I am just applying a blanket exclusion here due to lack of time.
+      - run: |
+          bazel test \
+            --config=bb-workflow \
+            -- \
+            //... \
+            -//examples/... \
+            -//scripts/... \
+            -//src/main/native/windows/... \
+            -//src/test/shell/bazel:bazel_bootstrap_distfile_tar_test \
+            -//src/test/shell/bazel:bazel_bootstrap_distfile_test \
+            -//src/test/shell/bazel:starlark_repository_test \
+            -//src/test/shell/integration/... \
+            -//src/tools/launcher/... \
+            -//third_party/... \
+            -//tools/...
