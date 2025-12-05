@@ -158,6 +158,7 @@ pkg_files(
     srcs = ["//:srcs"],
     attributes = pkg_attributes(mode = "0755"),
     excludes = [
+        "buildbuddy.yaml", # buildbuddy specific
         "MODULE.bazel.lock",  # Use MODULE.bazel.lock.dist instead
         "//examples:srcs",
         "//site:srcs",
