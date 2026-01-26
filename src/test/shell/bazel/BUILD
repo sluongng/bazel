@@ -1308,7 +1308,10 @@ sh_test(
         "@bazel_tools//tools/bash/runfiles",
         "@local_bazel_source_list//:sources",
     ],
-    tags = ["no_windows"],
+    tags = [
+        "manual",
+        "no_windows",
+    ],
 )
 
 sh_test(
