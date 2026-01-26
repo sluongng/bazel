@@ -1,0 +1,23 @@
+actions:
+  - name: Test
+    container_image: ubuntu-24.04
+    resource_requests:
+      disk: 27GB
+    triggers:
+      push:
+        branches:
+          - "master"
+    steps:
+      # Shell tests now run under bb-remote; adjust exec_properties or the test
+      # container image if new remote-only failures appear.
+      - run: |
+          bazel test \
+            --config=bb-workflow \
+            -- \
+            //... \
+            -//examples/... \
+            -//scripts/... \
+            -//src/main/native/windows/... \
+            -//src/tools/launcher/... \
+            -//third_party/... \
+            -//tools/...

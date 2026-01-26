@@ -1,0 +1,172 @@
+# RBE Master Sync
+#
+# Remotes and branches:
+# - origin (rbe fork: sluongng/bazel-rbe)
+#   - master: merge commits M(X) that trigger CI for each upstream commit X.
+# - upstream (source: bazelbuild/bazel)
+#   - master: authoritative upstream history we iterate over.
+# - direct (direct fork: sluongng/bazel)
+#   - sluongng/bb-remote: stack of un-upstreamed changes rebased onto each X.
+#
+# Overview:
+# - This workflow runs in the RBE fork (origin = sluongng/bazel-rbe).
+# - It maintains a rebased stack of changes from the direct fork branch
+#   `sluongng/bb-remote`, replayed onto each new upstream commit.
+# - For each new upstream commit X, it:
+#     1) rebases the stack onto X,
+#     2) creates a non-FF merge commit (first parent = X),
+#     3) stamps BuildBuddy build_metadata with X,
+#     4) pushes the merge commit to origin to trigger CI.
+# - At the end, it updates the direct fork branch to the last successful rebase.
+#
+# Diagram:
+#   upstream/master:  A --- B --- C --- D
+#                     \     \     \     \
+#   stack (bb-remote):  s1    s1'   s1''  s1'''
+#                      /     /     /     /
+#   origin/master:   M(A)  M(B)  M(C)  M(D)
+#   where M(X) = merge commit with first parent X and second parent = rebased stack
+#
+# Notes:
+# - If a rebase fails, the workflow aborts loudly with context and exits non-zero.
+# - BuildBuddy metadata is stamped in .bazelrc as UPSTREAM_COMMIT=<sha>.
+
+name: RBE Master Sync
+
+on:
+  schedule:
+    # Daily at 07:15 UTC; adjust as needed
+    - cron: '15 7 * * *'
+  workflow_dispatch:
+
+env:
+  BASE_BRANCH: master
+  STACK_BRANCH: sluongng/bb-remote
+  UPSTREAM_REPO: bazelbuild/bazel
+  DIRECT_REPO: sluongng/bazel
+
+jobs:
+  sync:
+    runs-on: ubuntu-slim
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          # Don't persist the default GITHUB_TOKEN credentials; we use PAT instead
+          persist-credentials: false
+
+      - name: Ensure push token is available
+        env:
+          TOKEN: ${{ secrets.RBE_PUSH_TOKEN }}
+        run: |
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::Set the RBE_PUSH_TOKEN secret with a PAT that can push to ${DIRECT_REPO} and ${TARGET_REPO}" >&2
+            exit 2
+          fi
+
+      - name: Configure git remotes
+        env:
+          PUSH_TOKEN: ${{ secrets.RBE_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Ensure no leftover GITHUB_TOKEN extraheader overrides our PAT
+          git config --unset-all http.https://github.com/.extraheader || true
+          git config user.name "rbe-sync-bot"
+          git config user.email "actions@github.com"
+
+          for remote in upstream direct; do
+            git remote remove "${remote}" || true
+          done
+
+          git remote add upstream https://github.com/${UPSTREAM_REPO}.git
+          git remote add direct https://${PUSH_TOKEN}@github.com/${DIRECT_REPO}.git
+          git remote set-url origin https://${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+          git remote -v
+
+      - name: Fetch branches
+        run: |
+          set -euo pipefail
+          git fetch upstream ${BASE_BRANCH} --tags
+          git fetch direct ${STACK_BRANCH}
+          git fetch origin ${BASE_BRANCH} || true
+
+      - name: Rebase stack onto each new upstream commit and push merge commits
+        run: |
+          set -euo pipefail
+
+          update_metadata() {
+            local base_sha="$1"
+            local file=".bazelrc"
+            local key="UPSTREAM_COMMIT"
+
+            if grep -q "build_metadata=${key}=" "${file}"; then
+              sed -i -E "s|(build_metadata=${key}=)[^[:space:]]+|\\1${base_sha}|" "${file}"
+              return
+            fi
+
+            if grep -q "build_metadata=VISIBILITY" "${file}"; then
+              awk -v key="${key}" -v sha="${base_sha}" '
+                {print}
+                $0 ~ /build_metadata=VISIBILITY/ && !done {
+                  print "common:bb-remote --build_metadata=" key "=" sha
+                  done=1
+                }
+              ' "${file}" > "${file}.tmp" && mv "${file}.tmp" "${file}"
+            else
+              echo "common:bb-remote --build_metadata=${key}=${base_sha}" >> "${file}"
+            fi
+          }
+
+          # Local branch for the stack of changes (direct fork).
+          git checkout -B stack direct/${STACK_BRANCH}
+
+          # Identify the upstream commit our current stack is based on.
+          old_base=$(git merge-base upstream/${BASE_BRANCH} stack)
+          if [ -z "${old_base}" ]; then
+            echo "::error::Unable to determine base between upstream/${BASE_BRANCH} and direct/${STACK_BRANCH}" >&2
+            exit 3
+          fi
+
+          # Walk new upstream commits in first-parent order (chronological).
+          new_commits=$(git rev-list --first-parent --reverse ${old_base}..upstream/${BASE_BRANCH})
+          if [ -z "${new_commits}" ]; then
+            echo "No new upstream commits; nothing to do."
+            exit 0
+          fi
+
+          echo "Found $(printf '%s\n' "${new_commits}" | wc -l | xargs) new upstream commits to process."
+
+          for new_base in ${new_commits}; do
+            echo "::group::Rebasing stack onto ${new_base}"
+
+            if ! git rebase --rebase-merges --onto ${new_base} ${old_base} stack; then
+              echo "::error::Rebase failed onto ${new_base} (from base ${old_base})" >&2
+              git status -sb || true
+              git diff --name-only --diff-filter=U || true
+              git rebase --show-current-patch || true
+              git rebase --abort || true
+              exit 4
+            fi
+
+            # Create a non-ff merge commit with first parent = upstream commit.
+            git checkout -B merge-work ${new_base}
+            git merge --no-ff --no-edit stack
+
+            # Stamp BuildBuddy build_metadata with the upstream commit hash.
+            update_metadata "${new_base}"
+            git add .bazelrc
+            git commit --amend --no-edit
+
+            # Push merge commit to rbe to trigger CI.
+            git push --force-with-lease origin HEAD:${BASE_BRANCH}
+
+            old_base=${new_base}
+            git checkout stack
+            echo "::endgroup::"
+          done
+
+          # Update the direct fork stack branch to the last successful rebase.
+          git push --force-with-lease direct stack:${STACK_BRANCH}

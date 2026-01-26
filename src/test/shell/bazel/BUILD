@@ -461,6 +461,11 @@ sh_test(
     name = "bazel_spawnstats_test",
     srcs = ["bazel_spawnstats_test.sh"],
     data = [":test-deps"],
+    exec_properties = {
+        # Needed a full VM for permission to `mount /proc` into linux-sandbox processes
+        "test.workload-isolation-type": "firecracker",
+        "test.EstimatedComputeUnits": "2",
+    },
     tags = ["no_windows"],
 )
 
