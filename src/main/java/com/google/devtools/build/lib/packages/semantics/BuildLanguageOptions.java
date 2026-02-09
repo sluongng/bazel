@@ -218,6 +218,17 @@ public final class BuildLanguageOptions extends OptionsBase {
   public boolean experimentalIsolatedExtensionUsages;
 
   @Option(
+      name = "lazy_starlark_load",
+      defaultValue = "true",
+      documentationCategory = OptionDocumentationCategory.STARLARK_SEMANTICS,
+      effectTags = OptionEffectTag.LOADING_AND_ANALYSIS,
+      metadataTags = {OptionMetadataTag.EXPERIMENTAL},
+      help =
+          "If true, Bazel may skip statically unused load() statements that reference a different"
+              + " repository.")
+  public boolean lazyStarlarkLoad;
+
+  @Option(
       name = "incompatible_no_implicit_watch_label",
       defaultValue = "true",
       documentationCategory = OptionDocumentationCategory.STARLARK_SEMANTICS,
@@ -856,6 +867,7 @@ public final class BuildLanguageOptions extends OptionsBase {
             .setBool(EXPERIMENTAL_ENABLE_FIRST_CLASS_MACROS, experimentalEnableFirstClassMacros)
             .setBool(EXPERIMENTAL_ENABLE_SCL_DIALECT, experimentalEnableSclDialect)
             .setBool(EXPERIMENTAL_ISOLATED_EXTENSION_USAGES, experimentalIsolatedExtensionUsages)
+            .setBool(LAZY_STARLARK_LOAD, lazyStarlarkLoad)
             .setBool(INCOMPATIBLE_NO_IMPLICIT_WATCH_LABEL, incompatibleNoImplicitWatchLabel)
             .setBool(EXPERIMENTAL_GOOGLE_LEGACY_API, experimentalGoogleLegacyApi)
             .setBool(EXPERIMENTAL_PLATFORMS_API, experimentalPlatformsApi)
@@ -1039,6 +1051,7 @@ public final class BuildLanguageOptions extends OptionsBase {
   public static final String EXPERIMENTAL_ENABLE_SCL_DIALECT = "+experimental_enable_scl_dialect";
   public static final String EXPERIMENTAL_ISOLATED_EXTENSION_USAGES =
       "-experimental_isolated_extension_usages";
+  public static final String LAZY_STARLARK_LOAD = "+lazy_starlark_load";
   public static final String INCOMPATIBLE_NO_IMPLICIT_WATCH_LABEL =
       "+incompatible_no_implicit_watch_label";
   public static final String EXPERIMENTAL_GOOGLE_LEGACY_API = "-experimental_google_legacy_api";

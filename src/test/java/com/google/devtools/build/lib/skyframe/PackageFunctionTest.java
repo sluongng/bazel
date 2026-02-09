@@ -1055,6 +1055,105 @@ public class PackageFunctionTest extends BuildViewTestCase {
     validPackageoidWithoutErrors("p");
   }
 
+  @Test
+  public void testUnusedLoadFromExternalRepoDoesNotLoadRepo(
+      @TestParameter ComputationMode computationMode) throws Exception {
+    scratch.overwriteFile(
+        "MODULE.bazel",
+        "bazel_dep(name = 'some_repo')",
+        "local_path_override(module_name = 'some_repo', path = '/some_repo')");
+    scratch.file("/some_repo/MODULE.bazel", "module(name = 'some_repo')");
+    scratch.file(
+        "p/BUILD",
+        """
+        load("@some_repo//:a.bzl", "not_used")
+        filegroup(name = "ok")
+        """);
+
+    preparePackageLoading(computationMode);
+    invalidatePackages();
+    Packageoid pkg = validPackageoidWithoutErrors("p");
+    assertThat(pkg.getTargets()).containsKey("ok");
+  }
+
+  @Test
+  public void testUnusedLoadFromSameRepoStillLoadsFile(
+      @TestParameter ComputationMode computationMode) throws Exception {
+    scratch.file(
+        "p/BUILD",
+        """
+        load("//p:a.bzl", "not_used")
+        filegroup(name = "ok")
+        """);
+    preparePackageLoading(computationMode);
+    invalidatePackages();
+
+    Exception ex = evaluatePackageoidToException("p");
+    assertThat(ex)
+        .hasMessageThat()
+        .isEqualTo("error loading package 'p': cannot load '//p:a.bzl': no such file");
+    assertDetailedExitCode(
+        ex, PackageLoading.Code.IMPORT_STARLARK_FILE_ERROR, ExitCode.BUILD_FAILURE);
+  }
+
+  @Test
+  public void testUnusedTransitiveLoadFromExternalRepoDoesNotLoadRepo(
+      @TestParameter ComputationMode computationMode) throws Exception {
+    scratch.overwriteFile(
+        "MODULE.bazel",
+        "bazel_dep(name = 'some_repo')",
+        "local_path_override(module_name = 'some_repo', path = '/some_repo')");
+    scratch.file("/some_repo/MODULE.bazel", "module(name = 'some_repo')");
+    scratch.file(
+        "p/defs.bzl",
+        """
+        load("@some_repo//:a.bzl", "not_used")
+
+        def my_macro():
+            native.filegroup(name = "ok")
+        """);
+    scratch.file(
+        "p/BUILD",
+        """
+        load(":defs.bzl", "my_macro")
+        my_macro()
+        """);
+
+    preparePackageLoading(computationMode);
+    invalidatePackages();
+    Packageoid pkg = validPackageoidWithoutErrors("p");
+    assertThat(pkg.getTargets()).containsKey("ok");
+  }
+
+  @Test
+  public void testUnusedTransitiveLoadFromSameRepoStillLoadsFile(
+      @TestParameter ComputationMode computationMode) throws Exception {
+    scratch.file(
+        "p/defs.bzl",
+        """
+        load("//p:a.bzl", "not_used")
+
+        def my_macro():
+            native.filegroup(name = "ok")
+        """);
+    scratch.file(
+        "p/BUILD",
+        """
+        load(":defs.bzl", "my_macro")
+        my_macro()
+        """);
+
+    preparePackageLoading(computationMode);
+    invalidatePackages();
+
+    Exception ex = evaluatePackageoidToException("p");
+    assertThat(ex)
+        .hasMessageThat()
+        .contains("cannot load '//p:a.bzl': no such file");
+    assertDetailedExitCode(
+        ex, PackageLoading.Code.IMPORT_STARLARK_FILE_ERROR, ExitCode.BUILD_FAILURE);
+  }
+
   // See WorkspaceFileFunctionTest for tests that exercise load('@repo...').
 
   @Test
@@ -2072,6 +2171,33 @@ public class PackageFunctionTest extends BuildViewTestCase {
       scratch.file(
           "util/common.bzl", //
           "foo = 'FOO'");
+      scratch.file(
+          "pkg/BUILD", //
+          "print(foo)");
+
+      invalidatePackages();
+
+      getConfiguredTarget("//pkg:BUILD");
+      assertContainsEvent("FOO");
+    }
+
+    @Test
+    public void testPreludeAutomaticallyReexportsLoadedExternalSymbols_withLazyStarlarkLoad()
+        throws Exception {
+      setBuildLanguageOptions("--lazy_starlark_load=true");
+      scratch.overwriteFile(
+          "MODULE.bazel",
+          "bazel_dep(name = 'a_remote_repo')",
+          "local_path_override(module_name = 'a_remote_repo', path = '/a_remote_repo')");
+      scratch.file("/a_remote_repo/MODULE.bazel", "module(name = 'a_remote_repo')");
+      scratch.file("/a_remote_repo/util/BUILD");
+      scratch.file(
+          "/a_remote_repo/util/common.bzl", //
+          "foo = 'FOO'");
+      scratch.file("tools/test_build_rules/BUILD");
+      scratch.file(
+          "tools/test_build_rules/test_prelude", //
+          "load('@a_remote_repo//util:common.bzl', 'foo')");
       scratch.file(
           "pkg/BUILD", //
           "print(foo)");

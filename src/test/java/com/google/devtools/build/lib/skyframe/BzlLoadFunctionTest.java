@@ -806,7 +806,7 @@ public class BzlLoadFunctionTest extends BuildViewTestCase {
     scratch.file("repo/pkg/BUILD");
     scratch.file(
         "repo/pkg/foo1.bzl", //
-        "load(\"//lib:bar.bzl\", \"x\")");
+        "load(\"//lib:bar.bzl\", \"x\")\n" + "y = x");
     scratch.file("repo/lib/BUILD");
     scratch.file(
         "repo/lib/bar.bzl",
@@ -817,7 +817,7 @@ public class BzlLoadFunctionTest extends BuildViewTestCase {
     scratch.file("pkg/BUILD");
     scratch.file(
         "pkg/foo2.bzl", //
-        "load(\"@repo//lib:bar.bzl\", \"x\")");
+        "load(\"@repo//lib:bar.bzl\", \"x\")\n" + "y = x");
 
     checkSuccessfulLookup("@@repo+//pkg:foo1.bzl");
     assertNoEvents();
@@ -870,7 +870,7 @@ public class BzlLoadFunctionTest extends BuildViewTestCase {
     scratch.file("repo/a/BUILD");
     scratch.file(
         "repo/a/foo.bzl", //
-        "load(\"@@//b:bar.bzl\", \"x\")");
+        "load(\"@@//b:bar.bzl\", \"x\")\n" + "y = x");
     scratch.file("b/BUILD");
     scratch.file(
         "b/bar.bzl",

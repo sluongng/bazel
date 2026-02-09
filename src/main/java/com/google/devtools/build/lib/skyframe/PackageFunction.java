@@ -1049,7 +1049,12 @@ public abstract class PackageFunction implements SkyFunction {
         preludeLabel = Label.createUnvalidated(preludePackage, rawPreludeLabel.getName());
         Module prelude;
         try {
-          prelude = loadPrelude(env, packageId, preludeLabel, bzlLoadFunctionForInlining);
+          prelude =
+              loadPrelude(
+                  env,
+                  packageId,
+                  preludeLabel,
+                  bzlLoadFunctionForInlining);
         } catch (NoSuchPackageException e) {
           throw new PackageFunctionException(e, Transience.PERSISTENT);
         }
@@ -1116,9 +1121,21 @@ public abstract class PackageFunction implements SkyFunction {
         }
 
         // Compute key for each label in loads.
+        boolean lazyLoadStarlarkLoads =
+            starlarkBuiltinsValue.starlarkSemantics.getBool(
+                BuildLanguageOptions.LAZY_STARLARK_LOAD);
+        ImmutableList.Builder<Pair<String, Location>> loadedProgramLoads =
+            ImmutableList.builderWithExpectedSize(loadLabels.size());
         ImmutableList.Builder<BzlLoadValue.Key> keys =
             ImmutableList.builderWithExpectedSize(loadLabels.size());
-        for (Label loadLabel : loadLabels) {
+        for (int i = 0; i < loadLabels.size(); i++) {
+          Label loadLabel = loadLabels.get(i);
+          if (lazyLoadStarlarkLoads
+              && !compiled.prog.isLoadUsed(i)
+              && !loadLabel.getRepository().equals(packageId.getRepository())) {
+            continue;
+          }
+          loadedProgramLoads.add(programLoads.get(i));
           keys.add(BzlLoadValue.keyForBuild(loadLabel));
         }
 
@@ -1138,7 +1155,7 @@ public abstract class PackageFunction implements SkyFunction {
                   env,
                   packageId,
                   "file " + buildFileLabel.getCanonicalForm(),
-                  programLoads,
+                  loadedProgramLoads.build(),
                   keys.build(),
                   starlarkBuiltinsValue.starlarkSemantics,
                   bzlLoadFunctionForInlining,

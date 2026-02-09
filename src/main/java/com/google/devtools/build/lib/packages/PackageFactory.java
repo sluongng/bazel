@@ -536,6 +536,8 @@ public final class PackageFactory {
           StarlarkThread.create(
               mu, semantics, /* contextDescription= */ "", pkgBuilder.getSymbolGenerator());
       thread.setLoader(loadedModules::get);
+      thread.setSkipUnusedLoadsWithMissingModule(
+          semantics.getBool(BuildLanguageOptions.LAZY_STARLARK_LOAD));
       thread.setPrintHandler(Event.makeDebugPrintHandler(pkgBuilder.getLocalEventHandler()));
       pkgBuilder.storeInThread(thread);
 

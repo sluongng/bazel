@@ -30,6 +30,7 @@ public final class Program {
   private final Resolver.Function body;
   private final ImmutableList<String> loads;
   private final ImmutableList<Location> loadLocations;
+  private final ImmutableList<Boolean> loadUsed;
   private final ImmutableMap<String, DocComments> docCommentsMap;
   private final ImmutableList<Comment> unusedDocCommentLines;
 
@@ -37,15 +38,19 @@ public final class Program {
       Resolver.Function body,
       ImmutableList<String> loads,
       ImmutableList<Location> loadLocations,
+      ImmutableList<Boolean> loadUsed,
       ImmutableMap<String, DocComments> docCommentsMap,
       ImmutableList<Comment> unusedDocCommentLines) {
     Preconditions.checkArgument(
         loads.size() == loadLocations.size(), "each load must have a corresponding location");
+    Preconditions.checkArgument(
+        loads.size() == loadUsed.size(), "each load must have a corresponding usage flag");
 
     // TODO(adonovan): compile here.
     this.body = body;
     this.loads = loads;
     this.loadLocations = loadLocations;
+    this.loadUsed = loadUsed;
     this.docCommentsMap = docCommentsMap;
     this.unusedDocCommentLines = unusedDocCommentLines;
   }
@@ -68,6 +73,11 @@ public final class Program {
   /*** Returns the location of the ith load (see {@link #getLoads}). */
   public Location getLoadLocation(int i) {
     return loadLocations.get(i);
+  }
+
+  /** Returns whether the ith load statement has at least one statically used imported symbol. */
+  public boolean isLoadUsed(int i) {
+    return loadUsed.get(i);
   }
 
   /**
@@ -125,11 +135,20 @@ public final class Program {
     // Extract load statements.
     ImmutableList.Builder<String> loads = ImmutableList.builder();
     ImmutableList.Builder<Location> loadLocations = ImmutableList.builder();
+    ImmutableList.Builder<Boolean> loadUsed = ImmutableList.builder();
     for (Statement stmt : file.getStatements()) {
       if (stmt instanceof LoadStatement load) {
+        boolean used = false;
+        for (LoadStatement.Binding binding : load.getBindings()) {
+          if (binding.getLocalName().getBinding().isUsed()) {
+            used = true;
+            break;
+          }
+        }
         String module = load.getImport().getValue();
         loads.add(module);
         loadLocations.add(load.getImport().getLocation());
+        loadUsed.add(used);
       }
     }
 
@@ -148,6 +167,7 @@ public final class Program {
         file.getResolvedFunction(),
         loads.build(),
         loadLocations.build(),
+        loadUsed.build(),
         docCommentsMap,
         unusedDocCommentLines);
   }
@@ -176,6 +196,7 @@ public final class Program {
         body,
         /* loads= */ ImmutableList.of(),
         /* loadLocations= */ ImmutableList.of(),
+        /* loadUsed= */ ImmutableList.of(),
         /* docCommentsMap= */ ImmutableMap.of(),
         /* unusedDocCommentLines= */ ImmutableList.of());
   }

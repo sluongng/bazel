@@ -245,6 +245,15 @@ final class Eval {
   }
 
   private static void execLoad(StarlarkThread.Frame fr, LoadStatement node) throws EvalException {
+    String moduleName = node.getImport().getValue();
+    boolean used = false;
+    for (LoadStatement.Binding binding : node.getBindings()) {
+      if (binding.getLocalName().getBinding().isUsed()) {
+        used = true;
+        break;
+      }
+    }
+
     // Has the application defined a behavior for load statements in this thread?
     StarlarkThread.Loader loader = fr.thread.getLoader();
     if (loader == null) {
@@ -253,8 +262,18 @@ final class Eval {
     }
 
     // Load module.
-    String moduleName = node.getImport().getValue();
-    Module module = loader.load(moduleName);
+    Module module = null;
+    if (!used
+        && moduleName.startsWith("@")
+        && fr.thread.shouldSkipUnusedLoadsWithMissingModule()) {
+      module = loader.load(moduleName);
+      if (module == null) {
+        return;
+      }
+    }
+    if (module == null) {
+      module = loader.load(moduleName);
+    }
     if (module == null) {
       fr.setErrorLocation(node.getStartLocation());
       throw Starlark.errorf("module '%s' not found", moduleName);

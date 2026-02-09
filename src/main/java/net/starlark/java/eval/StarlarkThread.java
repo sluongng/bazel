@@ -250,6 +250,12 @@ public final class StarlarkThread {
   /** Loader for Starlark load statements. Null if loading is disallowed. */
   @Nullable private Loader loader = null;
 
+  /**
+   * If true, an unused load statement is treated as a no-op when the configured loader returns
+   * null for that module.
+   */
+  private boolean skipUnusedLoadsWithMissingModule = false;
+
   private UncheckedExceptionContext uncheckedExceptionContext = () -> "";
 
   /** Stack of active function calls. */
@@ -385,6 +391,18 @@ public final class StarlarkThread {
   /** Sets the behavior of Starlark load statements executed by this thread. */
   public void setLoader(Loader loader) {
     this.loader = Preconditions.checkNotNull(loader);
+  }
+
+  /**
+   * If true, unused load statements are skipped when the configured loader returns null for their
+   * module.
+   */
+  public void setSkipUnusedLoadsWithMissingModule(boolean value) {
+    this.skipUnusedLoadsWithMissingModule = value;
+  }
+
+  boolean shouldSkipUnusedLoadsWithMissingModule() {
+    return skipUnusedLoadsWithMissingModule;
   }
 
   /**

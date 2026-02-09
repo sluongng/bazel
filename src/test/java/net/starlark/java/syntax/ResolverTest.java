@@ -542,6 +542,21 @@ public class ResolverTest {
   }
 
   @Test
+  public void testLoadBindingUsedByAugmentedAssignment() throws Exception {
+    options.loadBindsGlobally(true);
+    options.allowToplevelRebinding(true);
+
+    StarlarkFile file =
+        getValidFile(
+            "load('@repo//:defs.bzl', 'x')",
+            "x += 1");
+
+    LoadStatement load = (LoadStatement) file.getStatements().get(0);
+    assertThat(load.getBindings()).hasSize(1);
+    assertThat(load.getBindings().get(0).getLocalName().getBinding().isUsed()).isTrue();
+  }
+
+  @Test
   public void testBindingScopeAndIndex_functionAnnotations() throws Exception {
     options.allowTypeSyntax(true);
     options.resolveTypeSyntax(true);

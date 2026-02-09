@@ -767,6 +767,23 @@ public final class EvaluationTest {
   }
 
   @Test
+  public void testUnusedLoadFromExternalRepoSkipsMissingModule() throws Exception {
+    StarlarkThread thread =
+        StarlarkThread.createTransient(Mutability.create(), StarlarkSemantics.DEFAULT);
+    thread.setSkipUnusedLoadsWithMissingModule(true);
+    thread.setLoader(module -> null);
+
+    Module module = Module.create();
+    Starlark.execFile(
+        ParserInput.fromLines("load('@repo//:unused.bzl', 'not_used')", "x = 1"),
+        FileOptions.DEFAULT,
+        module,
+        thread);
+
+    assertThat(module.getGlobal("x")).isEqualTo(StarlarkInt.of(1));
+  }
+
+  @Test
   public void testTopLevelRebinding() throws Exception {
     FileOptions options =
         FileOptions.DEFAULT.toBuilder()

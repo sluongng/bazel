@@ -800,19 +800,32 @@ public class BzlLoadFunction implements SkyFunction {
               StarlarkBuiltinsValue.isBuiltinsRepo(label.getRepository()) ? " (internal)" : ""),
           Code.PARSE_ERROR);
     }
+    boolean lazyLoadStarlarkLoads =
+        builtins.starlarkSemantics.getBool(BuildLanguageOptions.LAZY_STARLARK_LOAD);
+    ImmutableList.Builder<Pair<String, Location>> loadedProgramLoads =
+        ImmutableList.builderWithExpectedSize(loadLabels.size());
     ImmutableList.Builder<BzlLoadValue.Key> loadKeysBuilder =
         ImmutableList.builderWithExpectedSize(loadLabels.size());
-    for (Label loadLabel : loadLabels) {
+    for (int i = 0; i < loadLabels.size(); i++) {
+      Label loadLabel = loadLabels.get(i);
+      if (lazyLoadStarlarkLoads
+          && !key.isBuildPrelude()
+          && !prog.isLoadUsed(i)
+          && !loadLabel.getRepository().equals(pkg.getRepository())) {
+        continue;
+      }
+      loadedProgramLoads.add(programLoads.get(i));
       loadKeysBuilder.add(key.getKeyForLoad(loadLabel));
     }
+    ImmutableList<Pair<String, Location>> filteredProgramLoads = loadedProgramLoads.build();
     ImmutableList<BzlLoadValue.Key> loadKeys = loadKeysBuilder.build();
 
     // Load .bzl modules.
     // When not using bzl inlining, this is done in parallel for all loads.
     List<BzlLoadValue> loadValues =
         inliningState == null
-            ? computeBzlLoadsWithSkyframe(env, loadKeys, programLoads)
-            : computeBzlLoadsWithInlining(env, loadKeys, programLoads, inliningState);
+            ? computeBzlLoadsWithSkyframe(env, loadKeys, filteredProgramLoads)
+            : computeBzlLoadsWithInlining(env, loadKeys, filteredProgramLoads, inliningState);
     if (loadValues == null) {
       return null; // Skyframe deps unavailable
     }
@@ -825,7 +838,7 @@ public class BzlLoadFunction implements SkyFunction {
         "module " + label.getCanonicalForm(),
         loadValues,
         loadKeys,
-        programLoads,
+        filteredProgramLoads,
         /* demoteErrorsToWarnings= */ !builtins.starlarkSemantics.getBool(
             BuildLanguageOptions.CHECK_BZL_VISIBILITY),
         env.getListener());
@@ -836,9 +849,10 @@ public class BzlLoadFunction implements SkyFunction {
     fp.addBytes(compileValue.getDigest());
 
     // Populate the load map and add transitive digests to the fingerprint.
-    Map<String, Module> loadMap = Maps.newLinkedHashMapWithExpectedSize(programLoads.size());
+    Map<String, Module> loadMap =
+        Maps.newLinkedHashMapWithExpectedSize(filteredProgramLoads.size());
     int i = 0;
-    for (Pair<String, Location> load : programLoads) {
+    for (Pair<String, Location> load : filteredProgramLoads) {
       BzlLoadValue v = loadValues.get(i++);
       loadMap.put(load.first, v.getModule()); // dups ok
       fp.addBytes(v.getTransitiveDigest());
@@ -1363,6 +1377,8 @@ public class BzlLoadFunction implements SkyFunction {
           StarlarkThread.create(
               mu, starlarkSemantics, /* contextDescription= */ "", SymbolGenerator.create(key));
       thread.setLoader(loadedModules::get);
+      thread.setSkipUnusedLoadsWithMissingModule(
+          starlarkSemantics.getBool(BuildLanguageOptions.LAZY_STARLARK_LOAD));
       // This is needed so that any calls to `Label()` will have its used repo mapping entries
       // recorded. See #20721 for more details.
       thread.setThreadLocal(Label.RepoMappingRecorder.class, repoMappingRecorder);

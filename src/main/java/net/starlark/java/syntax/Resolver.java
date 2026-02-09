@@ -96,15 +96,31 @@ public final class Resolver extends NodeVisitor {
     // Otherwise, the first occurrence of this symbol (which must be non-binding).
     private final Identifier first;
 
+    // If non-null, use of this binding implies use of the aliased binding.
+    @Nullable private final Binding aliasedBinding;
+
+    // True iff this binding is referenced in a non-binding context anywhere in the resolved tree.
+    private boolean used;
+
     // Set by TypeTagger (possibly more than once) if applicable.
     // Null is treated as untyped / Any.
     @Nullable private StarlarkType type;
 
     private Binding(Scope scope, int index, boolean isSyntactic, Identifier first) {
+      this(scope, index, isSyntactic, first, /* aliasedBinding= */ null);
+    }
+
+    private Binding(
+        Scope scope,
+        int index,
+        boolean isSyntactic,
+        Identifier first,
+        @Nullable Binding aliasedBinding) {
       this.scope = scope;
       this.index = index;
       this.isSyntactic = isSyntactic;
       this.first = first;
+      this.aliasedBinding = aliasedBinding;
     }
 
     /**
@@ -128,6 +144,11 @@ public final class Resolver extends NodeVisitor {
     /** Returns the scope of the binding. */
     public Scope getScope() {
       return scope;
+    }
+
+    /** Returns whether this binding is referenced in a non-binding context. */
+    public boolean isUsed() {
+      return used;
     }
 
     /**
@@ -159,6 +180,13 @@ public final class Resolver extends NodeVisitor {
     /** Assigns (or clears) a type to this binding. May be called more than once. */
     void setType(@Nullable StarlarkType type) {
       this.type = type;
+    }
+
+    void noteUse() {
+      used = true;
+      if (aliasedBinding != null) {
+        aliasedBinding.noteUse();
+      }
     }
   }
 
@@ -650,6 +678,7 @@ public final class Resolver extends NodeVisitor {
     assertIsNotBound(id);
     Binding bind = use(id);
     if (bind != null) {
+      bind.noteUse();
       id.setBinding(bind);
       return;
     }
@@ -830,6 +859,13 @@ public final class Resolver extends NodeVisitor {
           "cannot perform augmented assignment on a list or tuple expression");
     }
 
+    if (node.isAugmented() && node.getLHS() instanceof Identifier lhs) {
+      // Augmented assignment to an identifier reads the old value before writing the new value.
+      // This identifier is in binding position and won't be visited as an Identifier use.
+      assertIsBound(lhs);
+      lhs.getBinding().noteUse();
+    }
+
     if (node.getType() != null && options.resolveTypeSyntax()) {
       visit(node.getType());
     }
@@ -960,7 +996,13 @@ public final class Resolver extends NodeVisitor {
             }
             int index = b.freevars.size();
             b.freevars.add(bind);
-            bind = new Binding(Scope.FREE, index, /* isSyntactic= */ true, bind.first);
+            bind =
+                new Binding(
+                    Scope.FREE,
+                    index,
+                    /* isSyntactic= */ true,
+                    bind.first,
+                    /* aliasedBinding= */ bind);
           }
         }
 
