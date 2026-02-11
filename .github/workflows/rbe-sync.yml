@@ -15,8 +15,9 @@
 # - For each new upstream commit X, it:
 #     1) rebases the stack onto X,
 #     2) creates a non-FF merge commit (first parent = X),
-#     3) stamps BuildBuddy build_metadata with X,
-#     4) pushes the merge commit to origin to trigger CI.
+#     3) regenerates MODULE.bazel.lock via `bazel mod deps`,
+#     4) stamps BuildBuddy build_metadata with X,
+#     5) pushes the merge commit to origin to trigger CI.
 # - At the end, it updates the direct fork branch to the last successful rebase.
 #
 # Diagram:
@@ -63,9 +64,19 @@ jobs:
           TOKEN: ${{ secrets.RBE_PUSH_TOKEN }}
         run: |
           if [ -z "${TOKEN}" ]; then
-            echo "::error::Set the RBE_PUSH_TOKEN secret with a PAT that can push to ${DIRECT_REPO} and ${TARGET_REPO}" >&2
+            echo "::error::Set the RBE_PUSH_TOKEN secret with a PAT that can push to ${DIRECT_REPO} and ${GITHUB_REPOSITORY}" >&2
             exit 2
           fi
+
+      - name: Install Bazelisk
+        run: |
+          set -euo pipefail
+          mkdir -p "${HOME}/bin"
+          curl -fsSL -o "${HOME}/bin/bazel" \
+            "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64"
+          chmod +x "${HOME}/bin/bazel"
+          echo "${HOME}/bin" >> "${GITHUB_PATH}"
+          "${HOME}/bin/bazel" --version
 
       - name: Configure git remotes
         env:
@@ -155,9 +166,12 @@ jobs:
             git checkout -B merge-work ${new_base}
             git merge --no-ff --no-edit stack
 
+            # Regenerate lockfile after rebasing onto new upstream base.
+            bazel --output_base=/tmp/ob-rbe-sync mod deps --lockfile_mode=update
+
             # Stamp BuildBuddy build_metadata with the upstream commit hash.
             update_metadata "${new_base}"
-            git add .bazelrc
+            git add .bazelrc MODULE.bazel.lock
             git commit --amend --no-edit
 
             # Push merge commit to rbe to trigger CI.
