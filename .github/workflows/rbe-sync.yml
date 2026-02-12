@@ -167,6 +167,9 @@ jobs:
             git merge --no-ff --no-edit stack
 
             # Regenerate lockfile after rebasing onto new upstream base.
+            # Delete inherited lockfile first to avoid parse failures across
+            # Bazel lockfile schema changes (e.g. missing recordedInputs).
+            rm -f MODULE.bazel.lock
             bazel --output_base=/tmp/ob-rbe-sync mod deps --lockfile_mode=update
 
             # Stamp BuildBuddy build_metadata with the upstream commit hash.
