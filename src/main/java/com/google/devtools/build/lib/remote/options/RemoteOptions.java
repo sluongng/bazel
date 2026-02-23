@@ -234,9 +234,13 @@ public final class RemoteOptions extends CommonRemoteOptions {
       documentationCategory = OptionDocumentationCategory.REMOTE,
       effectTags = {OptionEffectTag.UNKNOWN},
       converter = RemoteDurationConverter.class,
+      deprecationWarning =
+          "Deprecated for gRPC remote calls. Configure gRPC timeouts in"
+              + " --remote_grpc_service_config. This flag still applies to HTTP remote cache.",
       help =
-          "The maximum amount of time to wait for remote execution and cache calls. For the REST"
-              + " cache, this is both the connect and the read timeout. Following units can be"
+          "The maximum amount of time to wait for HTTP remote cache calls. For the REST cache,"
+              + " this is both the connect and the read timeout. For gRPC remote calls, use"
+              + " --remote_grpc_service_config to configure RPC timeouts. Following units can be"
               + " used: Days (d), hours (h), minutes (m), seconds (s), and milliseconds (ms). If"
               + " the unit is omitted, the value is interpreted as seconds.")
   public Duration remoteTimeout;
@@ -348,9 +352,14 @@ public final class RemoteOptions extends CommonRemoteOptions {
       defaultValue = "5",
       documentationCategory = OptionDocumentationCategory.REMOTE,
       effectTags = {OptionEffectTag.UNKNOWN},
+      deprecationWarning =
+          "Deprecated for gRPC RPC retries and hedging. Configure gRPC retryPolicy/hedgingPolicy"
+              + " in --remote_grpc_service_config. This flag still controls Bazel-level retries"
+              + " (including multi-call/streaming workflows and HTTP cache behavior).",
       help =
-          "The maximum number of attempts to retry a transient error. "
-              + "If set to 0, retries are disabled.")
+          "The maximum number of attempts for Bazel-level retries of transient errors. For gRPC"
+              + " RPC-level retries and hedging, use --remote_grpc_service_config. If set to 0,"
+              + " Bazel-level retries are disabled.")
   public int remoteMaxRetryAttempts;
 
   @Option(
@@ -359,10 +368,15 @@ public final class RemoteOptions extends CommonRemoteOptions {
       documentationCategory = OptionDocumentationCategory.REMOTE,
       effectTags = {OptionEffectTag.UNKNOWN},
       converter = RemoteDurationConverter.class,
+      deprecationWarning =
+          "Deprecated for gRPC RPC retries. Configure gRPC retry backoff in"
+              + " --remote_grpc_service_config. This flag still controls Bazel-level retry"
+              + " backoff behavior.",
       help =
-          "The maximum backoff delay between remote retry attempts. Following units can be used:"
-              + " Days (d), hours (h), minutes (m), seconds (s), and milliseconds (ms). If"
-              + " the unit is omitted, the value is interpreted as seconds.")
+          "The maximum backoff delay between Bazel-level retry attempts. For gRPC RPC-level retry"
+              + " backoff, use --remote_grpc_service_config. Following units can be used: Days"
+              + " (d), hours (h), minutes (m), seconds (s), and milliseconds (ms). If the unit is"
+              + " omitted, the value is interpreted as seconds.")
   public Duration remoteRetryMaxDelay;
 
   @Option(
@@ -463,6 +477,19 @@ public final class RemoteOptions extends CommonRemoteOptions {
               + " following serialized protobuf message, as performed by the method "
               + "LogEntry.writeDelimitedTo(OutputStream).")
   public PathFragment remoteGrpcLog;
+
+  @Option(
+      name = "remote_grpc_service_config",
+      oldName = "experimental_remote_grpc_service_config",
+      defaultValue = "null",
+      documentationCategory = OptionDocumentationCategory.REMOTE,
+      effectTags = {OptionEffectTag.UNKNOWN},
+      converter = OptionsUtils.PathFragmentConverter.class,
+      help =
+          "Path to a gRPC service config JSON file applied to remote gRPC channels. This can"
+              + " configure gRPC timeout, retry, and hedging policies. If unset, Bazel uses a"
+              + " default service config from the installation's embedded tools.")
+  public PathFragment remoteGrpcServiceConfig;
 
   @Option(
       name = "remote_cache_compression",

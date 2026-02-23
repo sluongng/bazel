@@ -114,6 +114,8 @@ import com.google.devtools.common.options.Options;
 import com.google.devtools.common.options.OptionsBase;
 import com.google.devtools.common.options.OptionsParsingResult;
 import com.google.devtools.common.options.RegexPatternOption;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import io.grpc.CallCredentials;
 import io.grpc.ClientInterceptor;
 import io.grpc.ManagedChannel;
@@ -122,10 +124,15 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.reactivex.rxjava3.plugins.RxJavaPlugins;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.lang.reflect.Type;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.nio.channels.ClosedChannelException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -138,6 +145,12 @@ import javax.annotation.Nullable;
 
 /** RemoteModule provides distributed cache and remote execution for Bazel. */
 public final class RemoteModule extends BlazeModule {
+  private static final PathFragment DEFAULT_GRPC_SERVICE_CONFIG_PATH =
+      PathFragment.create("embedded_tools/tools/remote/default_grpc_service_config.json");
+  private static final Gson GSON = new Gson();
+  private static final Type GRPC_SERVICE_CONFIG_TYPE =
+      new TypeToken<Map<String, Object>>() {}.getType();
+
   private final ListeningScheduledExecutorService retryScheduler =
       MoreExecutors.listeningDecorator(Executors.newScheduledThreadPool(1));
 
@@ -165,14 +178,16 @@ public final class RemoteModule extends BlazeModule {
             String target,
             String proxy,
             AuthAndTLSOptions options,
-            List<ClientInterceptor> interceptors)
+            List<ClientInterceptor> interceptors,
+            @Nullable Map<String, ?> grpcServiceConfig)
             throws IOException {
           return GoogleAuthUtils.newChannel(
               executorService,
               target,
               proxy,
               options,
-              interceptors.isEmpty() ? null : interceptors);
+              interceptors.isEmpty() ? null : interceptors,
+              grpcServiceConfig);
         }
       };
 
@@ -562,6 +577,24 @@ public final class RemoteModule extends BlazeModule {
       maxConnections = remoteOptions.remoteMaxConnections;
     }
 
+    @Nullable Map<String, ?> grpcServiceConfig = null;
+    if (enableGrpcCache
+        || enableRemoteExecution
+        || shouldEnableRemoteOutputService(remoteOptions)) {
+      // gRPC service config handles RPC-level timeout/retry/hedging. Bazel still performs
+      // higher-level retries for operation orchestration and streaming flows (for example:
+      // Execute/WaitExecution and ByteStream Write resume).
+      Path grpcServiceConfigPath = getGrpcServiceConfigPath(env, remoteOptions);
+      try {
+        grpcServiceConfig = loadGrpcServiceConfig(grpcServiceConfigPath);
+      } catch (IOException e) {
+        throw createOptionsExitException(
+            "Failed to read gRPC service config from '%s': %s"
+                .formatted(grpcServiceConfigPath, e.getMessage()),
+            FailureDetails.RemoteOptions.Code.EXECUTION_WITH_INVALID_CACHE);
+      }
+    }
+
     Retrier.CircuitBreaker circuitBreaker =
         CircuitBreakerFactory.createCircuitBreaker(remoteOptions);
     RemoteRetrier retrier =
@@ -578,6 +611,7 @@ public final class RemoteModule extends BlazeModule {
               remoteOptions,
               // Don't use auth flags for remote output service
               Options.getDefaults(AuthAndTLSOptions.class),
+              grpcServiceConfig,
               null,
               null,
               channelFactory,
@@ -636,7 +670,6 @@ public final class RemoteModule extends BlazeModule {
             invocationId,
             remoteOptions.remoteInstanceName,
             callCredentials,
-            remoteOptions.remoteTimeout.toSeconds(),
             retrier);
 
     ReferenceCountedChannel execChannel = null;
@@ -658,6 +691,7 @@ public final class RemoteModule extends BlazeModule {
                   executorService,
                   remoteOptions,
                   authAndTlsOptions,
+                  grpcServiceConfig,
                   TracingMetadataUtils.newExecHeadersInterceptor(remoteOptions),
                   loggingInterceptor,
                   channelFactory,
@@ -677,6 +711,7 @@ public final class RemoteModule extends BlazeModule {
                   executorService,
                   remoteOptions,
                   authAndTlsOptions,
+                  grpcServiceConfig,
                   TracingMetadataUtils.newExecHeadersInterceptor(remoteOptions),
                   loggingInterceptor,
                   channelFactory,
@@ -698,6 +733,7 @@ public final class RemoteModule extends BlazeModule {
                 executorService,
                 remoteOptions,
                 authAndTlsOptions,
+                grpcServiceConfig,
                 TracingMetadataUtils.newCacheHeadersInterceptor(remoteOptions),
                 loggingInterceptor,
                 channelFactory,
@@ -837,6 +873,7 @@ public final class RemoteModule extends BlazeModule {
                 executorService,
                 remoteOptions,
                 authAndTlsOptions,
+                grpcServiceConfig,
                 /* headersInterceptor= */ null,
                 loggingInterceptor,
                 channelFactory,
@@ -873,6 +910,7 @@ public final class RemoteModule extends BlazeModule {
       ExecutorService executorService,
       RemoteOptions remoteOptions,
       AuthAndTLSOptions authAndTlsOptions,
+      @Nullable Map<String, ?> grpcServiceConfig,
       @Nullable ClientInterceptor headersInterceptor,
       @Nullable ClientInterceptor loggingInterceptor,
       ChannelFactory channelFactory,
@@ -901,6 +939,7 @@ public final class RemoteModule extends BlazeModule {
                 remoteOptions,
                 authAndTlsOptions,
                 interceptors.build(),
+                grpcServiceConfig,
                 maxConcurrencyPerConnection,
                 verboseFailures,
                 reporter,
@@ -1197,6 +1236,34 @@ public final class RemoteModule extends BlazeModule {
   @Override
   public Iterable<Class<? extends OptionsBase>> getCommonCommandOptions() {
     return ImmutableList.of(RemoteOptions.class, AuthAndTLSOptions.class);
+  }
+
+  @VisibleForTesting
+  static Path getGrpcServiceConfigPath(CommandEnvironment env, RemoteOptions remoteOptions) {
+    if (remoteOptions.remoteGrpcServiceConfig != null) {
+      return Preconditions.checkNotNull(env.getWorkingDirectory(), "workingDirectory")
+          .getRelative(remoteOptions.remoteGrpcServiceConfig);
+    }
+    return env.getDirectories()
+        .getEmbeddedBinariesRoot()
+        .getRelative(DEFAULT_GRPC_SERVICE_CONFIG_PATH);
+  }
+
+  @VisibleForTesting
+  static Map<String, ?> loadGrpcServiceConfig(Path grpcServiceConfigPath) throws IOException {
+    try (Reader reader =
+        new InputStreamReader(grpcServiceConfigPath.getInputStream(), StandardCharsets.UTF_8)) {
+      Map<String, Object> serviceConfig =
+          GSON.fromJson(reader, GRPC_SERVICE_CONFIG_TYPE);
+      if (serviceConfig == null) {
+        throw new IOException(
+            "gRPC service config must be a JSON object: " + grpcServiceConfigPath);
+      }
+      return serviceConfig;
+    } catch (RuntimeException e) {
+      throw new IOException(
+          "Failed to parse gRPC service config JSON: " + grpcServiceConfigPath, e);
+    }
   }
 
   private static class BuildEventArtifactUploaderFactoryDelegate

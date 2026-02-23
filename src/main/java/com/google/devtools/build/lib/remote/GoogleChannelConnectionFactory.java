@@ -39,6 +39,7 @@ import io.grpc.ManagedChannel;
 import io.reactivex.rxjava3.core.Single;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -56,6 +57,7 @@ public class GoogleChannelConnectionFactory
   private final String proxy;
   private final AuthAndTLSOptions options;
   private final List<ClientInterceptor> interceptors;
+  @Nullable private final Map<String, ?> grpcServiceConfig;
   private final int maxConcurrency;
   private final boolean verboseFailures;
   private final Reporter reporter;
@@ -71,6 +73,7 @@ public class GoogleChannelConnectionFactory
       RemoteOptions remoteOptions,
       AuthAndTLSOptions options,
       List<ClientInterceptor> interceptors,
+      @Nullable Map<String, ?> grpcServiceConfig,
       int maxConcurrency,
       boolean verboseFailures,
       Reporter reporter,
@@ -86,6 +89,7 @@ public class GoogleChannelConnectionFactory
     this.proxy = proxy;
     this.options = options;
     this.interceptors = interceptors;
+    this.grpcServiceConfig = grpcServiceConfig;
     this.maxConcurrency = maxConcurrency;
     this.verboseFailures = verboseFailures;
     this.reporter = reporter;
@@ -98,7 +102,9 @@ public class GoogleChannelConnectionFactory
   @Override
   public Single<ChannelConnectionWithServerCapabilities> create() {
     return Single.fromCallable(
-            () -> channelFactory.newChannel(target, proxy, options, interceptors))
+            () ->
+                channelFactory.newChannel(
+                    target, proxy, options, interceptors, grpcServiceConfig))
         .flatMap(
             channel -> {
               var serverCapabilitiesSingle =

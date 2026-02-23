@@ -1,0 +1,82 @@
+{
+  "methodConfig": [
+    {
+      "name": [
+        {
+          "service": "build.bazel.remote.execution.v2.ActionCache",
+          "method": "GetActionResult"
+        },
+        {
+          "service": "build.bazel.remote.execution.v2.ActionCache",
+          "method": "UpdateActionResult"
+        },
+        {
+          "service": "build.bazel.remote.execution.v2.Capabilities",
+          "method": "GetCapabilities"
+        },
+        {
+          "service": "build.bazel.remote.execution.v2.ContentAddressableStorage",
+          "method": "FindMissingBlobs"
+        },
+        {
+          "service": "build.bazel.remote.asset.v1.Fetch",
+          "method": "FetchBlob"
+        },
+        {
+          "service": "google.bytestream.ByteStream",
+          "method": "Read"
+        },
+        {
+          "service": "google.bytestream.ByteStream",
+          "method": "Write"
+        },
+        {
+          "service": "google.bytestream.ByteStream",
+          "method": "QueryWriteStatus"
+        }
+      ],
+      "timeout": "60s"
+    },
+    {
+      "name": [
+        {
+          "service": "build.bazel.remote.execution.v2.ActionCache",
+          "method": "GetActionResult"
+        },
+        {
+          "service": "build.bazel.remote.execution.v2.Capabilities",
+          "method": "GetCapabilities"
+        },
+        {
+          "service": "build.bazel.remote.execution.v2.ContentAddressableStorage",
+          "method": "FindMissingBlobs"
+        },
+        {
+          "service": "build.bazel.remote.execution.v2.ActionCache",
+          "method": "UpdateActionResult"
+        },
+        {
+          "service": "build.bazel.remote.asset.v1.Fetch",
+          "method": "FetchBlob"
+        },
+        {
+          "service": "google.bytestream.ByteStream",
+          "method": "QueryWriteStatus"
+        }
+      ],
+      "retryPolicy": {
+        "maxAttempts": 5,
+        "initialBackoff": "0.1s",
+        "maxBackoff": "5s",
+        "backoffMultiplier": 2.0,
+        "retryableStatusCodes": [
+          "ABORTED",
+          "DEADLINE_EXCEEDED",
+          "INTERNAL",
+          "RESOURCE_EXHAUSTED",
+          "UNAVAILABLE"
+        ]
+      }
+    }
+  ]
+}

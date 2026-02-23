@@ -160,6 +160,16 @@ public final class RemoteModuleTest {
 
     String productName = "bazel";
     Scratch scratch = new Scratch(new InMemoryFileSystem(DigestHashFunction.SHA256));
+    scratch.file(
+        "install/embedded_tools/tools/remote/default_grpc_service_config.json",
+        "{",
+        "  \"methodConfig\": [",
+        "    {",
+        "      \"name\": [{}],",
+        "      \"timeout\": \"60s\"",
+        "    }",
+        "  ]",
+        "}");
     ServerDirectories serverDirectories =
         new ServerDirectories(
             scratch.dir("install"), scratch.dir("output"), scratch.dir("user_root"));
@@ -247,9 +257,31 @@ public final class RemoteModuleTest {
   public void initialize() {
     remoteModule = new RemoteModule();
     remoteModule.setChannelFactory(
-        (target, proxy, options, interceptors) ->
+        (target, proxy, options, interceptors, grpcServiceConfig) ->
             InProcessChannelBuilder.forName(target).directExecutor().build());
     remoteOptions = Options.getDefaults(RemoteOptions.class);
+  }
+
+  @Test
+  public void loadGrpcServiceConfig_validJson_returnsMap() throws Exception {
+    Scratch scratch = new Scratch(new InMemoryFileSystem(DigestHashFunction.SHA256));
+    var configFile = scratch.file("remote_service_config.json", "{ \"methodConfig\": [] }");
+
+    var config = RemoteModule.loadGrpcServiceConfig(configFile);
+
+    assertThat(config).containsKey("methodConfig");
+  }
+
+  @Test
+  public void loadGrpcServiceConfig_invalidJson_throws() throws Exception {
+    Scratch scratch = new Scratch(new InMemoryFileSystem(DigestHashFunction.SHA256));
+    var configFile = scratch.file("remote_service_config.json", "{ not-json ");
+
+    IOException e =
+        Assert.assertThrows(
+            IOException.class, () -> RemoteModule.loadGrpcServiceConfig(configFile));
+
+    assertThat(e).hasMessageThat().contains("Failed to parse gRPC service config JSON");
   }
 
   @Test

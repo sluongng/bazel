@@ -87,4 +87,19 @@ public class RemoteOptionsTest {
     RemoteOptions options = parser.getOptions(RemoteOptions.class);
     assertThat(options.remoteGrpcLog).isNull();
   }
+
+  @Test
+  public void testRemoteGrpcServiceConfigDefaultIsNull() {
+    RemoteOptions options = Options.getDefaults(RemoteOptions.class);
+    assertThat(options.remoteGrpcServiceConfig).isNull();
+  }
+
+  @Test
+  public void testRemoteGrpcServiceConfigFlag() throws Exception {
+    OptionsParser parser = OptionsParser.builder().optionsClasses(RemoteOptions.class).build();
+    parser.parse("--remote_grpc_service_config=remote_service_config.json");
+    RemoteOptions options = parser.getOptions(RemoteOptions.class);
+    assertThat(options.remoteGrpcServiceConfig.getPathString())
+        .isEqualTo("remote_service_config.json");
+  }
 }

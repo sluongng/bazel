@@ -74,6 +74,28 @@ public final class GoogleAuthUtils {
       AuthAndTLSOptions options,
       @Nullable List<ClientInterceptor> interceptors)
       throws IOException {
+    return newChannel(
+        executor,
+        target,
+        proxy,
+        options,
+        interceptors,
+        /* grpcServiceConfig= */ null);
+  }
+
+  /**
+   * Create a new gRPC {@link ManagedChannel}.
+   *
+   * @throws IOException in case the channel can't be constructed.
+   */
+  public static ManagedChannel newChannel(
+      @Nullable Executor executor,
+      String target,
+      String proxy,
+      AuthAndTLSOptions options,
+      @Nullable List<ClientInterceptor> interceptors,
+      @Nullable Map<String, ?> grpcServiceConfig)
+      throws IOException {
     Preconditions.checkNotNull(target);
     Preconditions.checkNotNull(options);
 
@@ -96,6 +118,12 @@ public final class GoogleAuthUtils {
       }
       if (interceptors != null) {
         builder.intercept(interceptors);
+      }
+      if (grpcServiceConfig != null) {
+        builder
+            .defaultServiceConfig(grpcServiceConfig)
+            .enableRetry()
+            .disableServiceConfigLookUp();
       }
       if (sslContext != null) {
         builder.sslContext(sslContext);
