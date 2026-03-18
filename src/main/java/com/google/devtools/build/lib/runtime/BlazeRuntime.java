@@ -45,6 +45,7 @@ import com.google.devtools.build.lib.bugreport.Crash;
 import com.google.devtools.build.lib.bugreport.CrashContext;
 import com.google.devtools.build.lib.buildeventstream.BuildEventArtifactUploader;
 import com.google.devtools.build.lib.buildeventstream.BuildEventProtocolOptions;
+import com.google.devtools.build.lib.buildtool.BuildRequestOptions;
 import com.google.devtools.build.lib.buildtool.CommandPrecompleteEvent;
 import com.google.devtools.build.lib.buildtool.buildevent.ProfilerStartedEvent;
 import com.google.devtools.build.lib.clock.BlazeClock;
@@ -368,8 +369,18 @@ public final class BlazeRuntime implements BugReport.BlazeRuntimeInterface {
       long waitTimeInMs) {
     BuildEventProtocolOptions bepOptions = options.getOptions(BuildEventProtocolOptions.class);
     CommonCommandOptions commandOptions = options.getOptions(CommonCommandOptions.class);
+    BuildRequestOptions buildRequestOptions = options.getOptions(BuildRequestOptions.class);
     OutputStream out = null;
     boolean recordFullProfilerData = commandOptions.recordFullProfilerData;
+    boolean profileGuidedSchedulingEnabled =
+        buildRequestOptions != null && buildRequestOptions.profileGuidedSchedulingPath != null;
+    boolean slimProfile = commandOptions.slimProfile && !profileGuidedSchedulingEnabled;
+    boolean includePrimaryOutput =
+        commandOptions.includePrimaryOutput || profileGuidedSchedulingEnabled;
+    boolean includeTargetLabel =
+        commandOptions.profileIncludeTargetLabel || profileGuidedSchedulingEnabled;
+    boolean includeConfiguration =
+        commandOptions.profileIncludeTargetConfiguration || profileGuidedSchedulingEnabled;
     ImmutableSet.Builder<ProfilerTask> profiledTasksBuilder = ImmutableSet.builder();
     Format format = Format.JSON_TRACE_FILE_FORMAT;
     InstrumentationOutput profile = null;
@@ -443,7 +454,13 @@ public final class BlazeRuntime implements BugReport.BlazeRuntimeInterface {
       }
       ImmutableSet<ProfilerTask> profiledTasks = profiledTasksBuilder.build();
       if (!profiledTasks.isEmpty()) {
-        if (commandOptions.slimProfile && commandOptions.includePrimaryOutput) {
+        if (profileGuidedSchedulingEnabled && commandOptions.slimProfile) {
+          eventHandler.handle(
+              Event.warn(
+                  "Disabling --slim_profile while --profile_guided_scheduling is active so action"
+                      + " metadata stays available for future scheduling."));
+        }
+        if (slimProfile && includePrimaryOutput) {
           eventHandler.handle(
               Event.warn(
                   "Enabling both --slim_profile and"
@@ -483,10 +500,10 @@ public final class BlazeRuntime implements BugReport.BlazeRuntimeInterface {
                 recordFullProfilerData,
                 clock,
                 execStartTimeNanos,
-                /* slimProfile= */ commandOptions.slimProfile,
-                /* includePrimaryOutput= */ commandOptions.includePrimaryOutput,
-                /* includeTargetLabel= */ commandOptions.profileIncludeTargetLabel,
-                /* includeConfiguration= */ commandOptions.profileIncludeTargetConfiguration,
+                /* slimProfile= */ slimProfile,
+                /* includePrimaryOutput= */ includePrimaryOutput,
+                /* includeTargetLabel= */ includeTargetLabel,
+                /* includeConfiguration= */ includeConfiguration,
                 /* collectTaskHistograms= */ commandOptions.alwaysProfileSlowOperations);
 
         // Instead of logEvent() we're calling the low level function to pass the timings we took in

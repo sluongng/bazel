@@ -92,6 +92,18 @@ public class BuildRequestOptions extends OptionsBase {
   public int asyncExecutionMaxConcurrentActions;
 
   @Option(
+      name = "profile_guided_scheduling",
+      defaultValue = "null",
+      documentationCategory = OptionDocumentationCategory.EXECUTION_STRATEGY,
+      effectTags = {OptionEffectTag.EXECUTION},
+      converter = OptionsUtils.PathFragmentConverter.class,
+      help =
+          "Reads action durations from an existing Bazel JSON trace profile and schedules slower"
+              + " actions before faster ones when possible. Relative paths are resolved from the"
+              + " workspace.")
+  public PathFragment profileGuidedSchedulingPath;
+
+  @Option(
       name = "progress_report_interval",
       defaultValue = "0",
       documentationCategory = OptionDocumentationCategory.LOGGING,

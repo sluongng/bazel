@@ -32,7 +32,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.ToLongFunction;
 import javax.annotation.Nullable;
 
 /**
@@ -53,6 +55,7 @@ class NodeEntryVisitor {
 
   private final RunnableMaker partialReevaluationRunnableMaker;
   private final Cache<SkyKey, SkyKeyComputeState> stateCache;
+  @Nullable private final ToLongFunction<SkyKey> skyKeyPriorityFunction;
 
   /**
    * This state enum is used with {@link #partialReevaluationStates} to describe, for each {@link
@@ -119,11 +122,21 @@ class NodeEntryVisitor {
       InflightTrackingProgressReceiver progressReceiver,
       RunnableMaker runnableMaker,
       Cache<SkyKey, SkyKeyComputeState> stateCache) {
+    this(quiescingExecutor, progressReceiver, runnableMaker, stateCache, null);
+  }
+
+  NodeEntryVisitor(
+      QuiescingExecutor quiescingExecutor,
+      InflightTrackingProgressReceiver progressReceiver,
+      RunnableMaker runnableMaker,
+      Cache<SkyKey, SkyKeyComputeState> stateCache,
+      @Nullable ToLongFunction<SkyKey> skyKeyPriorityFunction) {
     this.quiescingExecutor = quiescingExecutor;
     this.progressReceiver = progressReceiver;
     this.runnableMaker = runnableMaker;
     this.partialReevaluationRunnableMaker = new PartialReevaluationRunnableMaker();
     this.stateCache = stateCache;
+    this.skyKeyPriorityFunction = skyKeyPriorityFunction;
   }
 
   void waitForCompletion() throws InterruptedException {
@@ -240,6 +253,9 @@ class NodeEntryVisitor {
     progressReceiver.enqueueing(key);
 
     var runnable = runnableMakerToUse.make(key);
+    if (skyKeyPriorityFunction != null) {
+      runnable = new ComparableRunnable(runnable, skyKeyPriorityFunction.applyAsLong(key));
+    }
     if (quiescingExecutor
         instanceof MultiThreadPoolsQuiescingExecutor multiThreadPoolsQuiescingExecutor) {
       ThreadPoolType threadPoolType;
@@ -258,6 +274,34 @@ class NodeEntryVisitor {
           /* shouldStallAwaitingSignal= */ key instanceof StallableSkykey);
     } else {
       quiescingExecutor.execute(runnable);
+    }
+  }
+
+  private static final class ComparableRunnable implements Runnable, Comparable<ComparableRunnable> {
+    private static final AtomicLong sequence = new AtomicLong();
+
+    private final Runnable delegate;
+    private final long priority;
+    private final long order;
+
+    private ComparableRunnable(Runnable delegate, long priority) {
+      this.delegate = delegate;
+      this.priority = priority;
+      this.order = sequence.getAndIncrement();
+    }
+
+    @Override
+    public void run() {
+      delegate.run();
+    }
+
+    @Override
+    public int compareTo(ComparableRunnable other) {
+      int priorityComparison = Long.compare(other.priority, priority);
+      if (priorityComparison != 0) {
+        return priorityComparison;
+      }
+      return Long.compare(order, other.order);
     }
   }
 }

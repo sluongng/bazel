@@ -99,6 +99,18 @@ java_library(
 )
 
 java_library(
+    name = "profile_guidance",
+    srcs = ["ProfileGuidance.java"],
+    deps = [
+        ":profiler",
+        "//src/main/java/com/google/devtools/build/lib/vfs",
+        "//third_party:gson",
+        "//third_party:guava",
+        "//third_party:jsr305",
+    ],
+)
+
+java_library(
     name = "command_profiler_module",
     srcs = ["CommandProfilerModule.java"],
     deps = [

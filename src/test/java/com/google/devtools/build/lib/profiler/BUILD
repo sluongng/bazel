@@ -31,6 +31,7 @@ java_test(
         "//src/main/java/com/google/devtools/build/lib/clock",
         "//src/main/java/com/google/devtools/build/lib/profiler",
         "//src/main/java/com/google/devtools/build/lib/profiler:collect_local_resource_usage",
+        "//src/main/java/com/google/devtools/build/lib/profiler:profile_guidance",
         "//src/main/java/com/google/devtools/build/lib/profiler:profiler-output",
         "//src/main/java/com/google/devtools/build/lib/profiler:profiler_impl",
         "//src/main/java/com/google/devtools/build/lib/profiler:system_network_stats_service_impl",

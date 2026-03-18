@@ -2221,3 +2221,26 @@ java_test(
         "@maven//:com_google_testparameterinjector_test_parameter_injector",
     ],
 )
+
+java_test(
+    name = "ProfileGuidedActionSchedulerTest",
+    srcs = ["ProfileGuidedActionSchedulerTest.java"],
+    deps = [
+        "//src/main/java/com/google/devtools/build/lib/actions",
+        "//src/main/java/com/google/devtools/build/lib/actions:action_lookup_data",
+        "//src/main/java/com/google/devtools/build/lib/actions:action_lookup_key",
+        "//src/main/java/com/google/devtools/build/lib/actions:artifacts",
+        "//src/main/java/com/google/devtools/build/lib/analysis/platform:platform",
+        "//src/main/java/com/google/devtools/build/lib/buildeventstream/proto:build_event_stream_java_proto",
+        "//src/main/java/com/google/devtools/build/lib/cmdline",
+        "//src/main/java/com/google/devtools/build/lib/profiler:profile_guidance",
+        "//src/main/java/com/google/devtools/build/lib/skyframe:skyframe_cluster",
+        "//src/main/java/com/google/devtools/build/lib/vfs:pathfragment",
+        "//src/main/java/net/starlark/java/syntax",
+        "//src/test/java/com/google/devtools/build/lib/actions/util",
+        "//src/test/java/com/google/devtools/build/lib/testutil",
+        "//third_party:guava",
+        "//third_party:junit4",
+        "//third_party:truth",
+    ],
+)

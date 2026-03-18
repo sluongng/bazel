@@ -21,6 +21,7 @@ import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.devtools.build.skyframe.WalkableGraph.WalkableGraphFactory;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import java.util.Optional;
+import java.util.function.ToLongFunction;
 import javax.annotation.Nullable;
 
 /**
@@ -36,6 +37,7 @@ public class EvaluationContext {
   private final boolean mergingSkyframeAnalysisExecutionPhases;
   private final boolean storeExactCycles;
   private final UnnecessaryTemporaryStateDropperReceiver unnecessaryTemporaryStateDropperReceiver;
+  @Nullable private final ToLongFunction<SkyKey> skyKeyPriorityFunction;
 
   private final boolean detectCycles;
 
@@ -48,6 +50,7 @@ public class EvaluationContext {
       boolean mergingSkyframeAnalysisExecutionPhases,
       boolean storeExactCycles,
       UnnecessaryTemporaryStateDropperReceiver unnecessaryTemporaryStateDropperReceiver,
+      @Nullable ToLongFunction<SkyKey> skyKeyPriorityFunction,
       boolean detectCycles) {
     this.parallelism = parallelism;
     this.executor = executor;
@@ -57,6 +60,7 @@ public class EvaluationContext {
     this.mergingSkyframeAnalysisExecutionPhases = mergingSkyframeAnalysisExecutionPhases;
     this.storeExactCycles = storeExactCycles;
     this.unnecessaryTemporaryStateDropperReceiver = unnecessaryTemporaryStateDropperReceiver;
+    this.skyKeyPriorityFunction = skyKeyPriorityFunction;
     this.detectCycles = detectCycles;
   }
 
@@ -124,6 +128,10 @@ public class EvaluationContext {
     return unnecessaryTemporaryStateDropperReceiver;
   }
 
+  public Optional<ToLongFunction<SkyKey>> getSkyKeyPriorityFunction() {
+    return Optional.ofNullable(skyKeyPriorityFunction);
+  }
+
   public boolean detectCycles() {
     return detectCycles;
   }
@@ -147,6 +155,7 @@ public class EvaluationContext {
     protected boolean storeExactCycles = true;
     protected UnnecessaryTemporaryStateDropperReceiver unnecessaryTemporaryStateDropperReceiver =
         UnnecessaryTemporaryStateDropperReceiver.NULL;
+    @Nullable protected ToLongFunction<SkyKey> skyKeyPriorityFunction;
 
     protected boolean detectCycles = true;
 
@@ -164,6 +173,7 @@ public class EvaluationContext {
       this.storeExactCycles = evaluationContext.storeExactCycles;
       this.unnecessaryTemporaryStateDropperReceiver =
           evaluationContext.unnecessaryTemporaryStateDropperReceiver;
+      this.skyKeyPriorityFunction = evaluationContext.skyKeyPriorityFunction;
       this.detectCycles = evaluationContext.detectCycles;
       return this;
     }
@@ -213,6 +223,12 @@ public class EvaluationContext {
     }
 
     @CanIgnoreReturnValue
+    public Builder setSkyKeyPriorityFunction(ToLongFunction<SkyKey> skyKeyPriorityFunction) {
+      this.skyKeyPriorityFunction = skyKeyPriorityFunction;
+      return this;
+    }
+
+    @CanIgnoreReturnValue
     public Builder setStoreExactCycles(boolean storeExactCycles) {
       this.storeExactCycles = storeExactCycles;
       return this;
@@ -234,6 +250,7 @@ public class EvaluationContext {
           mergingSkyframeAnalysisExecutionPhases,
           storeExactCycles,
           unnecessaryTemporaryStateDropperReceiver,
+          skyKeyPriorityFunction,
           detectCycles);
     }
   }

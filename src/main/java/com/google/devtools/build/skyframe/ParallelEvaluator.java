@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.function.ToLongFunction;
 import javax.annotation.Nullable;
 
 /**
@@ -74,6 +75,40 @@ public class ParallelEvaluator extends AbstractParallelEvaluator {
       CycleDetector cycleDetector,
       UnnecessaryTemporaryStateDropperReceiver unnecessaryTemporaryStateDropperReceiver,
       Predicate<SkyKey> keepGoing) {
+    this(
+        graph,
+        graphVersion,
+        minimalVersion,
+        skyFunctions,
+        reporter,
+        emittedEventState,
+        storedEventFilter,
+        errorInfoManager,
+        progressReceiver,
+        graphInconsistencyReceiver,
+        executor,
+        cycleDetector,
+        unnecessaryTemporaryStateDropperReceiver,
+        keepGoing,
+        null);
+  }
+
+  public ParallelEvaluator(
+      ProcessableGraph graph,
+      Version graphVersion,
+      Version minimalVersion,
+      ImmutableMap<SkyFunctionName, SkyFunction> skyFunctions,
+      ExtendedEventHandler reporter,
+      EmittedEventState emittedEventState,
+      EventFilter storedEventFilter,
+      ErrorInfoManager errorInfoManager,
+      InflightTrackingProgressReceiver progressReceiver,
+      GraphInconsistencyReceiver graphInconsistencyReceiver,
+      QuiescingExecutor executor,
+      CycleDetector cycleDetector,
+      UnnecessaryTemporaryStateDropperReceiver unnecessaryTemporaryStateDropperReceiver,
+      Predicate<SkyKey> keepGoing,
+      @Nullable ToLongFunction<SkyKey> skyKeyPriorityFunction) {
     super(
         graph,
         graphVersion,
@@ -87,7 +122,8 @@ public class ParallelEvaluator extends AbstractParallelEvaluator {
         graphInconsistencyReceiver,
         executor,
         cycleDetector,
-        keepGoing);
+        keepGoing,
+        skyKeyPriorityFunction);
     this.unnecessaryTemporaryStateDropperReceiver = unnecessaryTemporaryStateDropperReceiver;
   }
 

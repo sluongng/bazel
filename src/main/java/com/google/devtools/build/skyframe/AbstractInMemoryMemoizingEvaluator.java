@@ -180,7 +180,8 @@ public abstract class AbstractInMemoryMemoizingEvaluator implements MemoizingEva
                     ? new SimpleCycleDetector(evaluationContext.storeExactCycles())
                     : new ShortCircuitingCycleDetector(evaluationContext.getParallelism()),
                 evaluationContext.getUnnecessaryTemporaryStateDropperReceiver(),
-                getKeepGoingPredicate(evaluationContext));
+                getKeepGoingPredicate(evaluationContext),
+                evaluationContext.getSkyKeyPriorityFunction().orElse(null));
         result = evaluator.eval(roots);
       }
       return EvaluationResult.<T>builder()

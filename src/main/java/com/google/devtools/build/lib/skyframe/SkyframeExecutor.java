@@ -57,6 +57,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.eventbus.EventBus;
 import com.google.common.flogger.GoogleLogger;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.devtools.build.lib.actions.ActionAnalysisMetadata;
 import com.google.devtools.build.lib.actions.ActionCacheChecker;
 import com.google.devtools.build.lib.actions.ActionConflictException;
@@ -134,6 +135,7 @@ import com.google.devtools.build.lib.cmdline.RepositoryMapping;
 import com.google.devtools.build.lib.cmdline.RepositoryName;
 import com.google.devtools.build.lib.cmdline.TargetParsingException;
 import com.google.devtools.build.lib.collect.PathFragmentPrefixTrie;
+import com.google.devtools.build.lib.concurrent.AbstractQueueVisitor;
 import com.google.devtools.build.lib.concurrent.ExecutorUtil;
 import com.google.devtools.build.lib.concurrent.NamedForkJoinPool;
 import com.google.devtools.build.lib.concurrent.PooledInterner;
@@ -177,6 +179,7 @@ import com.google.devtools.build.lib.pkgcache.TestFilter;
 import com.google.devtools.build.lib.profiler.AutoProfiler;
 import com.google.devtools.build.lib.profiler.GoogleAutoProfilerUtils;
 import com.google.devtools.build.lib.profiler.Profiler;
+import com.google.devtools.build.lib.profiler.ProfileGuidance;
 import com.google.devtools.build.lib.profiler.SilentCloseable;
 import com.google.devtools.build.lib.query2.common.QueryTransitivePackagePreloader;
 import com.google.devtools.build.lib.query2.common.UniverseScope;
@@ -284,6 +287,7 @@ import com.google.devtools.build.skyframe.Injectable;
 import com.google.devtools.build.skyframe.MemoizingEvaluator;
 import com.google.devtools.build.skyframe.NodeEntry;
 import com.google.devtools.build.skyframe.NodeEntry.DirtyType;
+import com.google.devtools.build.skyframe.ParallelEvaluatorErrorClassifier;
 import com.google.devtools.build.skyframe.RecordingDifferencer;
 import com.google.devtools.build.skyframe.SkyFunction;
 import com.google.devtools.build.skyframe.SkyFunctionName;
@@ -301,6 +305,7 @@ import com.google.devtools.common.options.OptionsProvider;
 import com.google.devtools.common.options.ParsedOptionDescription;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.ForOverride;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -325,10 +330,12 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -1934,6 +1941,15 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
     resourceManager.resetResourceUsage();
     try {
       setExecutionProgressReceiver(executionProgressReceiver);
+      ImmutableList<ConfiguredTargetKey> topLevelCtKeys =
+          ImmutableSet.<ConfiguredTarget>builder()
+              .addAll(targetsToBuild)
+              .addAll(parallelTests)
+              .addAll(exclusiveTests)
+              .build()
+              .stream()
+              .map(ConfiguredTargetKey::fromConfiguredTarget)
+              .collect(toImmutableList());
       Iterable<TargetCompletionValue.TargetCompletionKey> targetKeys =
           TargetCompletionValue.keys(
               targetsToBuild, topLevelArtifactContext, Sets.union(parallelTests, exclusiveTests));
@@ -1941,13 +1957,23 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
       Iterable<SkyKey> testKeys =
           TestCompletionValue.keys(
               parallelTests, topLevelArtifactContext, /* exclusiveTesting= */ false);
-      EvaluationContext evaluationContext =
+      int parallelism = options.getOptions(BuildRequestOptions.class).jobs;
+      EvaluationContext.Builder evaluationContextBuilder =
           newEvaluationContextBuilder()
               .setKeepGoing(options.getOptions(KeepGoingOption.class).keepGoing)
-              .setParallelism(options.getOptions(BuildRequestOptions.class).jobs)
+              .setParallelism(parallelism)
               .setEventHandler(reporter)
-              .setExecutionPhase()
-              .build();
+              .setExecutionPhase();
+      ProfileGuidedSchedulingState guidedSchedulingState =
+          maybeCreateProfileGuidedSchedulingState(
+              reporter, options, topLevelCtKeys, aspects, parallelism);
+      if (guidedSchedulingState != null) {
+        evaluationContextBuilder
+            .setExecutor(guidedSchedulingState.executor())
+            .setSkyKeyPriorityFunction(
+                key -> guidedSchedulingState.priorities().getOrDefault(key, 0L));
+      }
+      EvaluationContext evaluationContext = evaluationContextBuilder.build();
       return memoizingEvaluator.evaluate(
           Iterables.concat(Artifact.keys(artifactsToBuild), targetKeys, aspectKeys, testKeys),
           evaluationContext);
@@ -1992,7 +2018,7 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
       ActionCacheChecker actionCacheChecker,
       ActionOutputDirectoryHelper outputDirectoryHelper,
       TopLevelArtifactContext topLevelArtifactContext)
-      throws InterruptedException {
+      throws InterruptedException, AbruptExitException {
     checkActive();
     checkState(actionLogBufferPathGenerator != null);
 
@@ -2009,11 +2035,27 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
               ImmutableSet.of(exclusiveTest),
               topLevelArtifactContext,
               /* exclusiveTesting= */ true);
-      return evaluate(
-          testKeys,
-          /* keepGoing= */ options.getOptions(KeepGoingOption.class).keepGoing,
-          /* numThreads= */ options.getOptions(BuildRequestOptions.class).jobs,
-          reporter);
+      int parallelism = options.getOptions(BuildRequestOptions.class).jobs;
+      EvaluationContext.Builder evaluationContextBuilder =
+          newEvaluationContextBuilder()
+              .setKeepGoing(options.getOptions(KeepGoingOption.class).keepGoing)
+              .setParallelism(parallelism)
+              .setEventHandler(reporter)
+              .setExecutionPhase();
+      ProfileGuidedSchedulingState guidedSchedulingState =
+          maybeCreateProfileGuidedSchedulingState(
+              reporter,
+              options,
+              ImmutableList.of(ConfiguredTargetKey.fromConfiguredTarget(exclusiveTest)),
+              ImmutableSet.of(),
+              parallelism);
+      if (guidedSchedulingState != null) {
+        evaluationContextBuilder
+            .setExecutor(guidedSchedulingState.executor())
+            .setSkyKeyPriorityFunction(
+                key -> guidedSchedulingState.priorities().getOrDefault(key, 0L));
+      }
+      return memoizingEvaluator.evaluate(testKeys, evaluationContextBuilder.build());
     } finally {
       // Also releases thread locks.
       resourceManager.resetResourceUsage();
@@ -2287,6 +2329,100 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
     } finally {
       cleanUpAfterSingleEvaluationWithActionExecution(reporter);
     }
+  }
+
+  private record ProfileGuidedSchedulingState(
+      QuiescingExecutor executor, ImmutableMap<ActionLookupData, Long> priorities) {}
+
+  @Nullable
+  private ProfileGuidedSchedulingState maybeCreateProfileGuidedSchedulingState(
+      ExtendedEventHandler eventHandler,
+      OptionsProvider options,
+      ImmutableList<ConfiguredTargetKey> topLevelCtKeys,
+      ImmutableSet<AspectKey> aspectKeys,
+      int parallelism)
+      throws InterruptedException, AbruptExitException {
+    BuildRequestOptions buildRequestOptions = options.getOptions(BuildRequestOptions.class);
+    if (buildRequestOptions == null || buildRequestOptions.profileGuidedSchedulingPath == null) {
+      return null;
+    }
+
+    Path profilePath =
+        resolveProfileGuidedSchedulingPath(buildRequestOptions.profileGuidedSchedulingPath);
+    ProfileGuidance guidance;
+    try {
+      guidance = ProfileGuidance.load(profilePath);
+    } catch (IOException | IllegalStateException e) {
+      throw createProfileGuidedSchedulingException(profilePath, e);
+    }
+    if (guidance.getActionEventCount() == 0) {
+      eventHandler.handle(
+          Event.warn(
+              String.format(
+                  "--profile_guided_scheduling file '%s' contains no completed action events;"
+                      + " using default action scheduling.",
+                  profilePath.getPathString())));
+      return null;
+    }
+
+    ProfileGuidedActionScheduler.Result result =
+        ProfileGuidedActionScheduler.compute(
+            collectActionLookupValuesInBuild(topLevelCtKeys, aspectKeys), guidance);
+    if (result.priorities().isEmpty()) {
+      eventHandler.handle(
+          Event.warn(
+              String.format(
+                  "--profile_guided_scheduling file '%s' did not match any current actions;"
+                      + " using default action scheduling.",
+                  profilePath.getPathString())));
+      return null;
+    }
+
+    return new ProfileGuidedSchedulingState(
+        createProfileGuidedSchedulingExecutor(parallelism), result.priorities());
+  }
+
+  private Path resolveProfileGuidedSchedulingPath(PathFragment profilePathFragment) {
+    Path workspacePath = directories.getWorkspace();
+    if (workspacePath == null) {
+      workspacePath = checkNotNull(directories.getWorkingDirectory());
+    }
+    return workspacePath.getRelative(profilePathFragment);
+  }
+
+  private static QuiescingExecutor createProfileGuidedSchedulingExecutor(int parallelism) {
+    ThreadPoolExecutor executorService =
+        new ThreadPoolExecutor(
+            parallelism,
+            parallelism,
+            /* keepAliveTime= */ 0L,
+            MILLISECONDS,
+            new PriorityBlockingQueue<>(),
+            new ThreadFactoryBuilder()
+                .setNameFormat("skyframe-evaluator-profile-guided %d")
+                .build());
+    executorService.prestartAllCoreThreads();
+    return AbstractQueueVisitor.createWithExecutorService(
+        executorService,
+        AbstractQueueVisitor.ExceptionHandlingMode.KEEP_GOING,
+        ParallelEvaluatorErrorClassifier.instance());
+  }
+
+  private static AbruptExitException createProfileGuidedSchedulingException(
+      Path profilePath, Exception cause) {
+    return new AbruptExitException(
+        DetailedExitCode.of(
+            FailureDetail.newBuilder()
+                .setMessage(
+                    String.format(
+                        "Failed to load --profile_guided_scheduling file '%s': %s",
+                        profilePath.getPathString(), cause.getMessage()))
+                .setExecution(
+                    FailureDetails.Execution.newBuilder()
+                        .setCode(FailureDetails.Execution.Code.NON_ACTION_EXECUTION_FAILURE)
+                        .build())
+                .build()),
+        cause);
   }
 
   private class EnableAnalysisScope implements AutoCloseable {
