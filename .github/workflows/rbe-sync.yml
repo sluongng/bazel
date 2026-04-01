@@ -15,9 +15,10 @@
 # - For each new upstream commit X, it:
 #     1) rebases the stack onto X,
 #     2) creates a non-FF merge commit (first parent = X),
-#     3) regenerates MODULE.bazel.lock via `bazel mod deps`,
-#     4) stamps BuildBuddy build_metadata with X,
-#     5) pushes the merge commit to origin to trigger CI.
+#     3) removes upstream workflows, keeping only `rbe-sync.yml`,
+#     4) regenerates MODULE.bazel.lock via `bazel mod deps`,
+#     5) stamps BuildBuddy build_metadata with X,
+#     6) pushes the merge commit to origin to trigger CI.
 # - At the end, it updates the direct fork branch to the last successful rebase.
 #
 # Diagram:
@@ -131,6 +132,15 @@ jobs:
             fi
           }
 
+          cleanup_workflows() {
+            local workflows_dir=".github/workflows"
+
+            mkdir -p "${workflows_dir}"
+            find "${workflows_dir}" -mindepth 1 -maxdepth 1 \
+              ! -name "rbe-sync.yml" -exec rm -rf {} +
+            rm -rf .github/workflows_disabled
+          }
+
           # Local branch for the stack of changes (direct fork).
           git checkout -B stack direct/${STACK_BRANCH}
 
@@ -166,6 +176,10 @@ jobs:
             git checkout -B merge-work ${new_base}
             git merge --no-ff --no-edit stack
 
+            # Keep the fork's workflow surface minimal so upstream workflow churn
+            # does not need to live in the rebased stack history.
+            cleanup_workflows
+
             # Regenerate lockfile after rebasing onto new upstream base.
             # Delete inherited lockfile first to avoid parse failures across
             # Bazel lockfile schema changes (e.g. missing recordedInputs).
@@ -174,7 +188,7 @@ jobs:
 
             # Stamp BuildBuddy build_metadata with the upstream commit hash.
             update_metadata "${new_base}"
-            git add .bazelrc MODULE.bazel.lock
+            git add -A .github .bazelrc MODULE.bazel.lock
             git commit --amend --no-edit
 
             # Push merge commit to rbe to trigger CI.
