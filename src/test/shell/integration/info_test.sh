@@ -160,7 +160,7 @@ function assert_analyzed_target_summary() {
     || fail "expected analyzed target summary with ${expected_targets_configured} target(s) configured in ${log_file}"
 }
 
-function test_info_bazel_bin_invalidates_incremental_analysis() {
+function test_info_bazel_bin_keeps_incremental_analysis_warm() {
   write_incremental_info_repro
   enable_disk_cache_in_test_bazelrc
 
@@ -173,8 +173,8 @@ function test_info_bazel_bin_invalidates_incremental_analysis() {
   bazel info bazel-bin >"${TEST_log}" 2>&1 \
     || fail "${PRODUCT_NAME} info bazel-bin failed"
   run_nobuild_with_bep post.txt post.log //foo:foo
-  assert_targets_configured_metric_present post.txt
-  assert_analyzed_target_summary post.log 1
+  assert_targets_configured_metric_absent post.txt
+  assert_analyzed_target_summary post.log 0
 }
 
 function test_info_output_base_keeps_incremental_analysis_warm() {
