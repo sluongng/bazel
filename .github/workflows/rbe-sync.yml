@@ -30,7 +30,9 @@
 #   where M(X) = merge commit with first parent X and second parent = rebased stack
 #
 # Notes:
-# - If a rebase fails, the workflow aborts loudly with context and exits non-zero.
+# - Semantic failures (rebase/merge/invariant violations) abort immediately.
+# - Transient transport-like failures (download/fetch/push/module fetch) retry a
+#   few times and then abort if they still fail.
 # - BuildBuddy metadata is stamped in .bazelrc as UPSTREAM_COMMIT=<sha>.
 
 name: RBE Master Sync
@@ -72,8 +74,31 @@ jobs:
       - name: Install Bazelisk
         run: |
           set -euo pipefail
+
+          retry_command() {
+            local max_attempts="$1"
+            local sleep_seconds="$2"
+            shift 2
+            local attempt=1
+            local rc=0
+
+            while true; do
+              if "$@"; then
+                return 0
+              fi
+              rc=$?
+              if [ "${attempt}" -ge "${max_attempts}" ]; then
+                return "${rc}"
+              fi
+              echo "Attempt ${attempt}/${max_attempts} failed: $*" >&2
+              attempt=$((attempt + 1))
+              sleep "${sleep_seconds}"
+            done
+          }
+
           mkdir -p "${HOME}/bin"
-          curl -fsSL -o "${HOME}/bin/bazel" \
+          retry_command 3 5 \
+            curl -fsSL -o "${HOME}/bin/bazel" \
             "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64"
           chmod +x "${HOME}/bin/bazel"
           echo "${HOME}/bin" >> "${GITHUB_PATH}"
@@ -101,13 +126,65 @@ jobs:
       - name: Fetch branches
         run: |
           set -euo pipefail
-          git fetch upstream ${BASE_BRANCH} --tags
-          git fetch direct ${STACK_BRANCH}
-          git fetch origin ${BASE_BRANCH} || true
+
+          retry_command() {
+            local max_attempts="$1"
+            local sleep_seconds="$2"
+            shift 2
+            local attempt=1
+            local rc=0
+
+            while true; do
+              if "$@"; then
+                return 0
+              fi
+              rc=$?
+              if [ "${attempt}" -ge "${max_attempts}" ]; then
+                return "${rc}"
+              fi
+              echo "Attempt ${attempt}/${max_attempts} failed: $*" >&2
+              attempt=$((attempt + 1))
+              sleep "${sleep_seconds}"
+            done
+          }
+
+          retry_command 3 5 git fetch upstream ${BASE_BRANCH} --tags
+          retry_command 3 5 git fetch direct ${STACK_BRANCH}
+          retry_command 3 5 git fetch origin ${BASE_BRANCH} || true
 
       - name: Rebase stack onto each new upstream commit and push merge commits
         run: |
           set -euo pipefail
+
+          retry_command() {
+            local max_attempts="$1"
+            local sleep_seconds="$2"
+            shift 2
+            local attempt=1
+            local rc=0
+
+            while true; do
+              if "$@"; then
+                return 0
+              fi
+              rc=$?
+              if [ "${attempt}" -ge "${max_attempts}" ]; then
+                return "${rc}"
+              fi
+              echo "Attempt ${attempt}/${max_attempts} failed: $*" >&2
+              attempt=$((attempt + 1))
+              sleep "${sleep_seconds}"
+            done
+          }
+
+          require_clean_worktree() {
+            local context="$1"
+            if [ -n "$(git status --porcelain)" ]; then
+              echo "::error::Worktree is unexpectedly dirty after ${context}" >&2
+              git status -sb || true
+              exit 5
+            fi
+          }
 
           update_metadata() {
             local base_sha="$1"
@@ -141,8 +218,31 @@ jobs:
             rm -rf .github/workflows_disabled
           }
 
+          assert_workflow_invariants() {
+            local workflows_dir=".github/workflows"
+            if [ ! -f "${workflows_dir}/rbe-sync.yml" ]; then
+              echo "::error::Missing ${workflows_dir}/rbe-sync.yml after cleanup" >&2
+              exit 6
+            fi
+
+            local extra_workflows
+            extra_workflows=$(find "${workflows_dir}" -mindepth 1 -maxdepth 1 \
+              ! -name "rbe-sync.yml" -print)
+            if [ -n "${extra_workflows}" ]; then
+              echo "::error::Unexpected workflows remain after cleanup:" >&2
+              printf '%s\n' "${extra_workflows}" >&2
+              exit 7
+            fi
+
+            if [ -e ".github/workflows_disabled" ]; then
+              echo "::error::.github/workflows_disabled should not exist after cleanup" >&2
+              exit 8
+            fi
+          }
+
           # Local branch for the stack of changes (direct fork).
           git checkout -B stack direct/${STACK_BRANCH}
+          require_clean_worktree "checking out stack"
 
           # Identify the upstream commit our current stack is based on.
           old_base=$(git merge-base upstream/${BASE_BRANCH} stack)
@@ -171,33 +271,39 @@ jobs:
               git rebase --abort || true
               exit 4
             fi
+            require_clean_worktree "rebasing stack onto ${new_base}"
 
             # Create a non-ff merge commit with first parent = upstream commit.
             git checkout -B merge-work ${new_base}
             git merge --no-ff --no-edit stack
+            require_clean_worktree "merging stack into ${new_base}"
 
             # Keep the fork's workflow surface minimal so upstream workflow churn
             # does not need to live in the rebased stack history.
             cleanup_workflows
+            assert_workflow_invariants
 
             # Regenerate lockfile after rebasing onto new upstream base.
             # Delete inherited lockfile first to avoid parse failures across
             # Bazel lockfile schema changes (e.g. missing recordedInputs).
             rm -f MODULE.bazel.lock
-            bazel --output_base=/tmp/ob-rbe-sync mod deps --lockfile_mode=update
+            retry_command 3 5 \
+              bazel --output_base=/tmp/ob-rbe-sync mod deps --lockfile_mode=update
 
             # Stamp BuildBuddy build_metadata with the upstream commit hash.
             update_metadata "${new_base}"
             git add -A .github .bazelrc MODULE.bazel.lock
             git commit --amend --no-edit
+            require_clean_worktree "amending merge commit for ${new_base}"
 
             # Push merge commit to rbe to trigger CI.
-            git push --force-with-lease origin HEAD:${BASE_BRANCH}
+            retry_command 3 5 git push --force-with-lease origin HEAD:${BASE_BRANCH}
 
             old_base=${new_base}
             git checkout stack
+            require_clean_worktree "returning to stack after ${new_base}"
             echo "::endgroup::"
           done
 
           # Update the direct fork stack branch to the last successful rebase.
-          git push --force-with-lease direct stack:${STACK_BRANCH}
+          retry_command 3 5 git push --force-with-lease direct stack:${STACK_BRANCH}
