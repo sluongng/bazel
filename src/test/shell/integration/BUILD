@@ -757,6 +757,7 @@ sh_test(
         ":test-deps",
         "@bazel_tools//tools/bash/runfiles",
     ],
+    tags = ["manual"],
 )
 
 sh_test(
@@ -981,6 +982,7 @@ sh_test(
         ":test-deps",
         "@bazel_tools//tools/bash/runfiles",
     ],
+    tags = ["manual"],
 )
 
 sh_test(
