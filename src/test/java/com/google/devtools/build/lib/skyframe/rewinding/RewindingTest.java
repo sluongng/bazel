@@ -188,10 +188,8 @@ public final class RewindingTest extends BuildIntegrationTestCase {
       @TestParameter({"standalone", "remote"}) String producerStrategy,
       @TestParameter({"standalone", "remote"}) String consumerStrategy)
       throws Exception {
-    if (!AnalysisMock.get().isThisBazel()) {
-      // TODO: without this, test running internally hangs forever. Need to investigate why.
-      addOptions("--remote_cache_async=false");
-    }
+    // Without this, the test can hang forever when remote cache operations outlive a build.
+    addOptions("--remote_cache_async=false");
     addOptions(
         "--strategy_regexp=.*//test:rule.*=" + producerStrategy,
         "--strategy_regexp=.*//test:consume.*=" + consumerStrategy);
