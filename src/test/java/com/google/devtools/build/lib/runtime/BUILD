@@ -57,6 +57,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/analysis/config:invalid_configuration_exception",
         "//src/main/java/com/google/devtools/build/lib/analysis/platform",
         "//src/main/java/com/google/devtools/build/lib/bazel:bazel_services",
+        "//src/main/java/com/google/devtools/build/lib/bazel:builtin_command_module",
         "//src/main/java/com/google/devtools/build/lib/bazel:modules",
         "//src/main/java/com/google/devtools/build/lib/bazel/repository/downloader",
         "//src/main/java/com/google/devtools/build/lib/bazel/rules:bazel_rules_module",

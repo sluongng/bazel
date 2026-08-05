@@ -150,7 +150,7 @@ public class TestCommand implements BlazeCommand {
 
     BuildRequest.Builder builder =
         BuildRequest.builder()
-            .setCommandName(getClass().getAnnotation(Command.class).name())
+            .setCommandName(env.getCommandName())
             .setId(env.getCommandId())
             .setOptions(options)
             .setStartupOptions(runtime.getStartupOptionsProvider())

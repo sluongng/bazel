@@ -257,7 +257,7 @@ public class RemoteExecutionService {
     this.knownMissingCasDigests = knownMissingCasDigests;
   }
 
-  private Command buildCommand(
+  static Command buildCommand(
       boolean useOutputPaths,
       Collection<? extends ActionInput> outputs,
       List<String> arguments,
@@ -325,6 +325,10 @@ public class RemoteExecutionService {
     return combinedCache != null && combinedCache.hasRemoteCache();
   }
 
+  RemotePathResolver getBaseRemotePathResolver() {
+    return baseRemotePathResolver;
+  }
+
   private boolean useDiskCache() {
     return combinedCache != null && combinedCache.hasDiskCache();
   }
@@ -366,7 +370,7 @@ public class RemoteExecutionService {
   }
 
   @Nullable
-  private static ByteString buildSalt(Spawn spawn, @Nullable SpawnScrubber spawnScrubber) {
+  static ByteString buildSalt(Spawn spawn, @Nullable SpawnScrubber spawnScrubber) {
     CacheSalt.Builder saltBuilder =
         CacheSalt.newBuilder().setMayBeExecutedRemotely(Spawns.mayBeExecutedRemotely(spawn));
 
@@ -403,11 +407,15 @@ public class RemoteExecutionService {
   @Nullable
   private ToolSignature getToolSignature(Spawn spawn, SpawnExecutionContext context)
       throws IOException, ExecException, InterruptedException {
-    return remoteOptions.getMarkToolInputs()
-            && Spawns.supportsWorkers(spawn)
-            && !spawn.getToolFiles().isEmpty()
+    return usesPersistentWorkerToolSignature(spawn)
         ? computePersistentWorkerSignature(spawn, context)
         : null;
+  }
+
+  boolean usesPersistentWorkerToolSignature(Spawn spawn) {
+    return remoteOptions.getMarkToolInputs()
+        && Spawns.supportsWorkers(spawn)
+        && !spawn.getToolFiles().isEmpty();
   }
 
   private void maybeAcquireRemoteActionBuildingSemaphore(ProfilerTask task)
@@ -434,6 +442,10 @@ public class RemoteExecutionService {
       initUseOutputPaths();
     }
     return this.useOutputPaths;
+  }
+
+  boolean useOutputPathsForGraphExecution() {
+    return useOutputPaths();
   }
 
   private synchronized void initUseOutputPaths() {

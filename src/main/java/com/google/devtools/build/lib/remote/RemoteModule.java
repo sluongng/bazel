@@ -158,6 +158,7 @@ public final class RemoteModule extends BlazeModule {
   @Nullable private RemoteOutputChecker remoteOutputChecker;
   @Nullable private RemoteOutputChecker lastRemoteOutputChecker;
   @Nullable private String lastBuildId;
+  @Nullable private GraphExecutionController graphExecutionController;
 
   private ChannelFactory channelFactory =
       new ChannelFactory() {
@@ -414,6 +415,8 @@ public final class RemoteModule extends BlazeModule {
     Preconditions.checkState(tempPathGenerator == null, "tempPathGenerator must be null");
     Preconditions.checkState(remoteOutputChecker == null, "remoteOutputChecker must be null");
     Preconditions.checkState(outputService == null, "remoteOutputService must be null");
+    Preconditions.checkState(
+        graphExecutionController == null, "graphExecutionController must be null");
 
     if ("clean".equals(env.getCommandName())) {
       knownMissingCasDigests.clear();
@@ -485,6 +488,22 @@ public final class RemoteModule extends BlazeModule {
     boolean enableRemoteExecution = shouldEnableRemoteExecution(remoteOptions);
     boolean enableGrpcCache = GrpcCacheClient.isRemoteCacheOptions(remoteOptions);
     boolean enableRemoteDownloader = shouldEnableRemoteDownloader(remoteOptions);
+
+    if (isGraphExecutionCommand(env) && !enableRemoteExecution) {
+      throw createOptionsExitException(
+          env.getCommandName() + " requires --remote_executor",
+          FailureDetails.RemoteOptions.Code.EXECUTION_WITH_INVALID_CACHE);
+    }
+    if (isGraphExecutionCommand(env) && remoteOptions.getScrubber() != null) {
+      throw createOptionsExitException(
+          env.getCommandName() + " does not support --experimental_remote_scrubbing_config",
+          FailureDetails.RemoteOptions.Code.EXECUTION_WITH_INVALID_CACHE);
+    }
+    if (isGraphExecutionCommand(env) && remoteOptions.getMarkToolInputs()) {
+      throw createOptionsExitException(
+          env.getCommandName() + " does not support --experimental_remote_mark_tool_inputs",
+          FailureDetails.RemoteOptions.Code.EXECUTION_WITH_INVALID_CACHE);
+    }
 
     if (enableDiskCache) {
       // Check that the disk cache directory, which is managed by a garbage collecting idle task,
@@ -849,6 +868,8 @@ public final class RemoteModule extends BlazeModule {
               () -> rpcLogFile);
       RemoteExecutionClient remoteExecutor =
           new GrpcRemoteExecutor(execChannel.retain(), callCredentialsProvider, execRetrier);
+      ReferenceCountedChannel graphChannel =
+          isGraphExecutionCommand(env) ? execChannel.retain() : null;
       execChannel.release();
       RemoteExecutionCache remoteCache =
           new RemoteExecutionCache(
@@ -868,6 +889,16 @@ public final class RemoteModule extends BlazeModule {
               remoteOutputChecker,
               outputService,
               knownMissingCasDigests);
+      if (graphChannel != null) {
+        graphExecutionController =
+            new GraphExecutionController(
+                env,
+                remoteOptions,
+                digestUtil,
+                remoteCache,
+                graphChannel,
+                callCredentialsProvider.getCallCredentials());
+      }
     } else {
       if (enableDiskCache) {
         try {
@@ -1116,6 +1147,14 @@ public final class RemoteModule extends BlazeModule {
     tempPathGenerator = null;
     rpcLogFile = null;
     remoteOutputChecker = null;
+    if (graphExecutionController != null) {
+      graphExecutionController.close();
+    }
+    graphExecutionController = null;
+  }
+
+  private static boolean isGraphExecutionCommand(CommandEnvironment env) {
+    return "gbuild".equals(env.getCommandName()) || "gtest".equals(env.getCommandName());
   }
 
   private static void afterCommandTask(
@@ -1159,7 +1198,14 @@ public final class RemoteModule extends BlazeModule {
             env.getOptions().getOptions(RemoteOptions.class), "RemoteOptions");
     registryBuilder.setRemoteLocalFallbackStrategyIdentifier(
         remoteOptions.getRemoteLocalFallbackStrategy());
-    actionContextProvider.registerRemoteSpawnStrategy(registryBuilder);
+    if (graphExecutionController != null) {
+      graphExecutionController.registerSpawnStrategy(
+          registryBuilder,
+          Preconditions.checkNotNull(
+              env.getOptions().getOptions(ExecutionOptions.class), "ExecutionOptions"));
+    } else {
+      actionContextProvider.registerRemoteSpawnStrategy(registryBuilder);
+    }
   }
 
   @Override
@@ -1222,6 +1268,12 @@ public final class RemoteModule extends BlazeModule {
     }
 
     actionContextProvider.setTempPathGenerator(tempPathGenerator);
+
+    if (graphExecutionController != null) {
+      graphExecutionController.setRemoteExecutionService(
+          actionContextProvider.getRemoteExecutionService());
+      builder.addExecutorLifecycleListener(graphExecutionController);
+    }
 
     if (actionContextProvider.getCombinedCache() != null) {
       Preconditions.checkNotNull(remoteOutputChecker, "remoteOutputChecker must not be null");

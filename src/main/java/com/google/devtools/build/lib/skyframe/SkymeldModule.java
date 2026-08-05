@@ -33,6 +33,11 @@ public class SkymeldModule extends BlazeModule {
 
   boolean determineIfMergingAnalysisExecution(CommandEnvironment env) {
     String commandName = env.getCommandName();
+    // Graph execution needs the complete post-analysis ActionGraph before any
+    // action is submitted, so it cannot overlap analysis and execution.
+    if (commandName.equals("gbuild") || commandName.equals("gtest")) {
+      return false;
+    }
     PathPackageLocator packageLocator = env.getPackageLocator();
     BuildRequestOptions buildRequestOptions =
         env.getOptions().getOptions(BuildRequestOptions.class);

@@ -257,6 +257,32 @@ java_library_srcs(
 )
 
 proto_library(
+    name = "graph_execution_proto",
+    srcs = ["graph_execution.proto"],
+    deps = [
+        "@com_google_protobuf//:duration_proto",
+        "@googleapis//google/rpc:status_proto",
+        "@remoteapis//:build_bazel_remote_execution_v2_remote_execution_proto",
+    ],
+)
+
+java_proto_library(
+    name = "graph_execution_java_proto",
+    deps = [":graph_execution_proto"],
+)
+
+java_library_srcs(
+    name = "graph_execution_java_proto_srcs",
+    deps = [":graph_execution_java_proto"],
+)
+
+java_grpc_library(
+    name = "graph_execution_java_grpc",
+    srcs = [":graph_execution_proto"],
+    deps = [":graph_execution_java_proto"],
+)
+
+proto_library(
     name = "cache_salt_proto",
     srcs = ["cache_salt.proto"],
 )

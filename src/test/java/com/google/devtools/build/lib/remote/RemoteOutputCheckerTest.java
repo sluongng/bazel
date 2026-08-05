@@ -14,6 +14,8 @@
 package com.google.devtools.build.lib.remote;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.google.common.collect.ImmutableList;
 import com.google.devtools.build.lib.actions.ArtifactRoot;
@@ -23,6 +25,7 @@ import com.google.devtools.build.lib.vfs.DigestHashFunction;
 import com.google.devtools.build.lib.vfs.FileSystem;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.build.lib.vfs.inmemoryfs.InMemoryFileSystem;
+import com.google.devtools.build.skyframe.MemoizingEvaluator;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -54,5 +57,21 @@ public class RemoteOutputCheckerTest {
     assertThat(
             remoteOutputChecker.shouldDownloadOutput(PathFragment.create("out/foo/bar-baz"), null))
         .isTrue();
+  }
+
+  @Test
+  public void graphCommandAliasesPreserveCanonicalOutputSelectionModes() {
+    for (String[] names : new String[][] {{"build", "gbuild"}, {"test", "gtest"}}) {
+      RemoteOutputChecker previous =
+          new RemoteOutputChecker(names[0], RemoteOutputsMode.MINIMAL, ImmutableList.of());
+      RemoteOutputChecker graph =
+          new RemoteOutputChecker(
+              names[1], RemoteOutputsMode.MINIMAL, ImmutableList.of(), previous);
+      MemoizingEvaluator evaluator = mock(MemoizingEvaluator.class);
+
+      graph.maybeInvalidateSkyframeValues(evaluator);
+
+      verifyNoInteractions(evaluator);
+    }
   }
 }

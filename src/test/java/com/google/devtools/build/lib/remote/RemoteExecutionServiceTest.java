@@ -261,6 +261,40 @@ public class RemoteExecutionServiceTest {
   }
 
   @Test
+  public void buildCommand_golden(@TestParameter boolean useOutputPaths) {
+    ActionInput outputFile = ActionsTestUtil.createArtifact(artifactRoot, "z-output");
+    ActionInput outputDirectory =
+        ActionsTestUtil.createTreeArtifactWithGeneratingAction(artifactRoot, "a-output");
+
+    Command command =
+        RemoteExecutionService.buildCommand(
+            useOutputPaths,
+            ImmutableList.of(outputFile, outputDirectory),
+            ImmutableList.of("tool", "--flag"),
+            ImmutableMap.of("Z_VAR", "last", "A_VAR", "first"),
+            /* platform= */ null,
+            remotePathResolver,
+            /* spawnScrubber= */ null,
+            /* executionPlatform= */ null);
+
+    Command.Builder expected =
+        Command.newBuilder()
+            .addArguments("tool")
+            .addArguments("--flag")
+            .addEnvironmentVariables(
+                Command.EnvironmentVariable.newBuilder().setName("A_VAR").setValue("first").build())
+            .addEnvironmentVariables(
+                Command.EnvironmentVariable.newBuilder().setName("Z_VAR").setValue("last").build())
+            .setWorkingDirectory("");
+    if (useOutputPaths) {
+      expected.addOutputPaths("outputs/a-output").addOutputPaths("outputs/z-output");
+    } else {
+      expected.addOutputFiles("outputs/z-output").addOutputDirectories("outputs/a-output");
+    }
+    assertThat(command).isEqualTo(expected.build());
+  }
+
+  @Test
   public void buildRemoteAction_withRegularFileAsOutput() throws Exception {
     PathFragment execPath = execRoot.getRelative("path/to/tree").asFragment();
     Spawn spawn =
@@ -2776,6 +2810,8 @@ public class RemoteExecutionServiceTest {
             : new DefaultRemotePathResolver(execRoot);
     RemoteExecutionService service = newRemoteExecutionService(remoteOptions);
 
+    assertThat(service.usesPersistentWorkerToolSignature(spawn)).isTrue();
+
     // Check that worker files are properly marked in the merkle tree.
     var runfilesSubDirectory =
         Directory.newBuilder()
@@ -2887,6 +2923,8 @@ public class RemoteExecutionServiceTest {
             .build();
     FakeSpawnExecutionContext context = newSpawnExecutionContext(spawn);
     RemoteExecutionService service = newRemoteExecutionService();
+
+    assertThat(service.usesPersistentWorkerToolSignature(spawn)).isFalse();
 
     RemoteAction remoteAction = service.buildRemoteAction(spawn, context);
 

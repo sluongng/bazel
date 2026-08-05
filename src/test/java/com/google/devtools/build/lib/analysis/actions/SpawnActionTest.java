@@ -246,6 +246,7 @@ public final class SpawnActionTest extends BuildViewTestCase {
             .addCommandLine(
                 CustomCommandLine.builder().add("-X").build(),
                 ParamFileInfo.builder(ParameterFileType.UNQUOTED).build())
+            .setEnvironment(ImmutableMap.of("FIXED", "value"))
             .build(nullOwnerWithTargetConfig(), targetConfig);
 
     // The action reports all arguments, including those inside the param file
@@ -261,11 +262,21 @@ public final class SpawnActionTest extends BuildViewTestCase {
     Spawn spawn =
         action.getSpawn(
             actionExecutionContext, /* clientEnv= */ ImmutableMap.of(), /* reportOutputs= */ true);
+    Spawn graphExecutionSpawn =
+        action.getSpawnForGraphExecution(
+            actionExecutionContext.getInputMetadataProvider(), /* clientEnv= */ ImmutableMap.of());
     String paramFileName = output.getExecPathString() + "-0.params";
     // The spawn's primary arguments should reference the param file
     assertThat(spawn.getArguments())
         .containsExactly("/bin/java", "-jvmarg", "-jar", "pkg/exe.jar", "@" + paramFileName)
         .inOrder();
+    assertThat(graphExecutionSpawn.getArguments())
+        .containsExactlyElementsIn(spawn.getArguments())
+        .inOrder();
+    assertThat(graphExecutionSpawn.getEnvironment()).isEqualTo(spawn.getEnvironment());
+    assertThat(graphExecutionSpawn.getEnvironment()).containsExactly("FIXED", "value");
+    assertThat(graphExecutionSpawn.getOutputFiles())
+        .containsExactlyElementsIn(spawn.getOutputFiles());
 
     // Asserts that the inputs contain the param file virtual input
     Optional<? extends ActionInput> input =
@@ -275,6 +286,15 @@ public final class SpawnActionTest extends BuildViewTestCase {
     assertThat(input).isPresent();
     VirtualActionInput paramFile = (VirtualActionInput) input.get();
     assertThat(paramFile.getBytes().toString(ISO_8859_1).trim()).isEqualTo("-X");
+    Optional<? extends ActionInput> graphExecutionInput =
+        stream(graphExecutionSpawn.getInputFiles().flatten())
+            .filter(i -> i instanceof VirtualActionInput)
+            .findFirst();
+    assertThat(graphExecutionInput).isPresent();
+    VirtualActionInput graphExecutionParamFile =
+        (VirtualActionInput) graphExecutionInput.orElseThrow();
+    assertThat(graphExecutionParamFile.getExecPath()).isEqualTo(paramFile.getExecPath());
+    assertThat(graphExecutionParamFile.getBytes()).isEqualTo(paramFile.getBytes());
   }
 
   @Test

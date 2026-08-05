@@ -84,8 +84,8 @@ public class RemoteOutputChecker implements OutputChecker {
       RemoteOutputChecker lastRemoteOutputChecker) {
     this.commandMode =
         switch (commandName) {
-          case "build" -> CommandMode.BUILD;
-          case "test" -> CommandMode.TEST;
+          case "build", "gbuild" -> CommandMode.BUILD;
+          case "test", "gtest" -> CommandMode.TEST;
           case "run" -> CommandMode.RUN;
           case "coverage" -> CommandMode.COVERAGE;
           default -> CommandMode.UNKNOWN;

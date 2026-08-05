@@ -96,7 +96,7 @@ public final class BuildCommand implements BlazeCommand {
 
       request =
           BuildRequest.builder()
-              .setCommandName(getClass().getAnnotation(Command.class).name())
+              .setCommandName(env.getCommandName())
               .setId(env.getCommandId())
               .setOptions(options)
               .setStartupOptions(runtime.getStartupOptionsProvider())

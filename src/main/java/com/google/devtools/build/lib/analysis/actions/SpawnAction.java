@@ -357,6 +357,21 @@ public class SpawnAction extends AbstractAction implements CommandAction {
   }
 
   /**
+   * Materializes the spawn for experimental whole-graph remote execution.
+   *
+   * <p>The caller is responsible for restricting this to actions that are safe to materialize
+   * before execution and for supplying an input metadata provider that rejects metadata which is
+   * not yet available. This follows the same command-line expansion, param-file creation, path
+   * mapping, and environment resolution path as ordinary execution.
+   */
+  public Spawn getSpawnForGraphExecution(
+      InputMetadataProvider inputMetadataProvider, Map<String, String> clientEnv)
+      throws CommandLineExpansionException, InterruptedException {
+    return getSpawn(
+        inputMetadataProvider, clientEnv, /* reportOutputs= */ true, getCommandLineLimits());
+  }
+
+  /**
    * Return a spawn that is representative of the command that this Action will execute in the given
    * client environment.
    */
@@ -365,18 +380,25 @@ public class SpawnAction extends AbstractAction implements CommandAction {
       Map<String, String> clientEnv,
       boolean reportOutputs)
       throws CommandLineExpansionException, InterruptedException {
+    return getSpawn(
+        actionExecutionContext.getInputMetadataProvider(),
+        clientEnv,
+        reportOutputs,
+        getCommandLineLimits());
+  }
+
+  private Spawn getSpawn(
+      InputMetadataProvider inputMetadataProvider,
+      Map<String, String> clientEnv,
+      boolean reportOutputs,
+      CommandLineLimits commandLineLimits)
+      throws CommandLineExpansionException, InterruptedException {
     PathMapper pathMapper =
         PathMappers.create(
-            this,
-            outputPathsMode,
-            this instanceof StarlarkAction,
-            actionExecutionContext.getInputMetadataProvider());
+            this, outputPathsMode, this instanceof StarlarkAction, inputMetadataProvider);
     ExpandedCommandLines expandedCommandLines =
         commandLines.expand(
-            actionExecutionContext.getInputMetadataProvider(),
-            getPrimaryOutput().getExecPath(),
-            pathMapper,
-            getCommandLineLimits());
+            inputMetadataProvider, getPrimaryOutput().getExecPath(), pathMapper, commandLineLimits);
 
     return new ActionSpawn(
         expandedCommandLines.arguments(),

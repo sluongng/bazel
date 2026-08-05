@@ -621,7 +621,7 @@ public class BuildEventStreamer {
     if (event instanceof BuildStartingEvent buildStartingEvent) {
       BuildRequest buildRequest = buildStartingEvent.request();
       isCommandToSkipBuildCompleteEvent =
-          buildRequest.getCommandName().equals("test")
+          isTestLikeCommand(buildRequest.getCommandName())
               || buildRequest.getCommandName().equals("coverage")
               || buildRequest.getCommandName().equals("run");
     }
@@ -682,6 +682,11 @@ public class BuildEventStreamer {
     if (finalEventsToCome != null && finalEventsToCome.isEmpty()) {
       close();
     }
+  }
+
+  @VisibleForTesting
+  static boolean isTestLikeCommand(String commandName) {
+    return commandName.equals("test") || commandName.equals("gtest");
   }
 
   private static boolean isCrash(BuildCompleteEvent event) {

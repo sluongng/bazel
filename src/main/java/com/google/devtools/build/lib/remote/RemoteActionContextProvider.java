@@ -154,7 +154,7 @@ final class RemoteActionContextProvider {
     return checkNotNull(actionInputFetcher);
   }
 
-  private RemoteExecutionService getRemoteExecutionService() {
+  RemoteExecutionService getRemoteExecutionService() {
     if (remoteExecutionService == null) {
       Path workingDirectory = env.getWorkingDirectory();
       RemoteOptions remoteOptions = checkNotNull(env.getOptions().getOptions(RemoteOptions.class));

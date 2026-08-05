@@ -30,6 +30,7 @@ public class BuiltinCommandModule extends BlazeModule {
   public void serverInit(OptionsParsingResult startupOptions, ServerBuilder builder) {
     builder.addCommands(
         new BuildCommand(),
+        new GbuildCommand(),
         new CanonicalizeCommand(),
         new CleanCommand(),
         new CoverageCommand(),
@@ -41,6 +42,7 @@ public class BuiltinCommandModule extends BlazeModule {
         runCommand,
         new ShutdownCommand(),
         new TestCommand(),
+        new GtestCommand(),
         new VersionCommand(),
         new AqueryCommand(),
         new CqueryCommand(),
