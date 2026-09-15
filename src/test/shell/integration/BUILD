@@ -119,11 +119,18 @@ sh_test(
         ":test-deps",
         "//src/test/java/com/google/devtools/build/lib/worker:ExampleWorker_deploy.jar",
     ],
+    env = {
+        "TEST_TMPDIR": "/var/tmp",
+    },
     exec_group_compatible_with = {
         "test": [
             "//:highcpu_machine",
             "//:mount_capable",
         ],
+    },
+    exec_properties = {
+        # This test needs additional scratch space on BuildBuddy RBE.
+        "test.EstimatedFreeDiskBytes": "100GB",
     },
     shard_count = 10,
     tags = [
@@ -210,8 +217,18 @@ sh_test(
         ":test-deps",
         "//src/test/java/com/google/devtools/build/lib/worker:ExampleWorker_deploy.jar",
     ],
+    env = {
+        "TEST_TMPDIR": "/var/tmp",
+    },
     exec_group_compatible_with = {
-        "test": ["//:cgroup_capable"],
+        "test": [
+            "//:cgroup_capable",
+            "//:highcpu_machine",
+        ],
+    },
+    exec_properties = {
+        # This test needs additional scratch space on BuildBuddy RBE.
+        "test.EstimatedFreeDiskBytes": "100GB",
     },
     shard_count = 10,
     tags = [
@@ -286,8 +303,18 @@ sh_test(
         ":test-deps",
         "//src/test/java/com/google/devtools/build/lib/worker:ExampleWorker_deploy.jar",
     ],
+    env = {
+        "TEST_TMPDIR": "/var/tmp",
+    },
     exec_group_compatible_with = {
-        "test": ["//:cgroup_capable"],
+        "test": [
+            "//:cgroup_capable",
+            "//:highcpu_machine",
+        ],
+    },
+    exec_properties = {
+        # This test needs additional scratch space on BuildBuddy RBE.
+        "test.EstimatedFreeDiskBytes": "100GB",
     },
     shard_count = 7,
     tags = [
@@ -395,6 +422,9 @@ sh_test(
         ":test-deps",
         "@bazel_tools//tools/bash/runfiles",
     ],
+    exec_group_compatible_with = {
+        "test": ["//:highcpu_machine"],
+    },
 )
 
 sh_test(
@@ -576,7 +606,10 @@ sh_test(
         "//src/test/shell:sandboxing_test_utils",
     ],
     exec_group_compatible_with = {
-        "test": ["//:mount_capable"],
+        "test": [
+            "//:highcpu_machine",
+            "//:mount_capable",
+        ],
     },
     shard_count = 2,
     tags = [
