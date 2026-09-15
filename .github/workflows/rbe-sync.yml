@@ -1,0 +1,322 @@
+# RBE Master Sync
+#
+# Remotes and branches:
+# - origin (rbe fork: sluongng/bazel-rbe)
+#   - master: merge commits M(X) that trigger CI for each upstream commit X.
+# - upstream (source: bazelbuild/bazel)
+#   - master: authoritative upstream history we iterate over.
+# - direct (direct fork: sluongng/bazel)
+#   - sluongng/bb-remote: stack of un-upstreamed changes rebased onto each X.
+#
+# Overview:
+# - This workflow runs in the RBE fork (origin = sluongng/bazel-rbe).
+# - It maintains a rebased stack of changes from the direct fork branch
+#   `sluongng/bb-remote`, replayed onto each new upstream commit.
+# - For each new upstream commit X, it:
+#     1) rebases the stack onto X,
+#     2) creates a non-FF merge commit (first parent = X),
+#     3) removes upstream workflows, keeping only `rbe-sync.yml`,
+#     4) regenerates MODULE.bazel.lock via `bazel mod deps`,
+#     5) stamps BuildBuddy build_metadata with X,
+#     6) pushes the merge commit to origin to trigger CI,
+#     7) checkpoints the matching stack on the direct fork.
+#
+# Diagram:
+#   upstream/master:  A --- B --- C --- D
+#                     \     \     \     \
+#   stack (bb-remote):  s1    s1'   s1''  s1'''
+#                      /     /     /     /
+#   origin/master:   M(A)  M(B)  M(C)  M(D)
+#   where M(X) = merge commit with first parent X and second parent = rebased stack
+#
+# Notes:
+# - Semantic failures (rebase/merge/invariant violations) abort immediately.
+# - Transient transport-like failures (download/fetch/push/module fetch) retry a
+#   few times and then abort if they still fail.
+# - BuildBuddy metadata is stamped in .bazelrc as UPSTREAM_COMMIT=<sha>.
+
+name: RBE Master Sync
+
+on:
+  schedule:
+    # Daily at 07:15 UTC; adjust as needed
+    - cron: '15 7 * * *'
+  workflow_dispatch:
+
+env:
+  BASE_BRANCH: master
+  STACK_BRANCH: sluongng/bb-remote
+  UPSTREAM_REPO: bazelbuild/bazel
+  DIRECT_REPO: sluongng/bazel
+
+jobs:
+  sync:
+    runs-on: ubuntu-slim
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          # Don't persist the default GITHUB_TOKEN credentials; we use PAT instead
+          persist-credentials: false
+
+      - name: Ensure push token is available
+        env:
+          TOKEN: ${{ secrets.RBE_PUSH_TOKEN }}
+        run: |
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::Set the RBE_PUSH_TOKEN secret with a PAT that can push to ${DIRECT_REPO} and ${GITHUB_REPOSITORY}" >&2
+            exit 2
+          fi
+
+      - name: Install Bazelisk
+        run: |
+          set -euo pipefail
+
+          retry_command() {
+            local max_attempts="$1"
+            local sleep_seconds="$2"
+            shift 2
+            local attempt=1
+            local rc=0
+
+            while true; do
+              if "$@"; then
+                return 0
+              else
+                rc=$?
+              fi
+              if [ "${attempt}" -ge "${max_attempts}" ]; then
+                return "${rc}"
+              fi
+              echo "Attempt ${attempt}/${max_attempts} failed: $*" >&2
+              attempt=$((attempt + 1))
+              sleep "${sleep_seconds}"
+            done
+          }
+
+          mkdir -p "${HOME}/bin"
+          retry_command 3 5 \
+            curl -fsSL -o "${HOME}/bin/bazel" \
+            "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64"
+          chmod +x "${HOME}/bin/bazel"
+          echo "${HOME}/bin" >> "${GITHUB_PATH}"
+          "${HOME}/bin/bazel" --version
+
+      - name: Configure git remotes
+        env:
+          PUSH_TOKEN: ${{ secrets.RBE_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Ensure no leftover GITHUB_TOKEN extraheader overrides our PAT
+          git config --unset-all http.https://github.com/.extraheader || true
+          git config user.name "rbe-sync-bot"
+          git config user.email "actions@github.com"
+
+          for remote in upstream direct; do
+            git remote remove "${remote}" || true
+          done
+
+          git remote add upstream https://github.com/${UPSTREAM_REPO}.git
+          git remote add direct https://${PUSH_TOKEN}@github.com/${DIRECT_REPO}.git
+          git remote set-url origin https://${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+          git remote -v
+
+      - name: Fetch branches
+        run: |
+          set -euo pipefail
+
+          retry_command() {
+            local max_attempts="$1"
+            local sleep_seconds="$2"
+            shift 2
+            local attempt=1
+            local rc=0
+
+            while true; do
+              if "$@"; then
+                return 0
+              else
+                rc=$?
+              fi
+              if [ "${attempt}" -ge "${max_attempts}" ]; then
+                return "${rc}"
+              fi
+              echo "Attempt ${attempt}/${max_attempts} failed: $*" >&2
+              attempt=$((attempt + 1))
+              sleep "${sleep_seconds}"
+            done
+          }
+
+          retry_command 3 5 git fetch upstream ${BASE_BRANCH} --tags
+          retry_command 3 5 git fetch direct ${STACK_BRANCH}
+          retry_command 3 5 git fetch origin ${BASE_BRANCH} || true
+
+      - name: Rebase stack onto each new upstream commit and push merge commits
+        run: |
+          set -euo pipefail
+
+          retry_command() {
+            local max_attempts="$1"
+            local sleep_seconds="$2"
+            shift 2
+            local attempt=1
+            local rc=0
+
+            while true; do
+              if "$@"; then
+                return 0
+              else
+                rc=$?
+              fi
+              if [ "${attempt}" -ge "${max_attempts}" ]; then
+                return "${rc}"
+              fi
+              echo "Attempt ${attempt}/${max_attempts} failed: $*" >&2
+              attempt=$((attempt + 1))
+              sleep "${sleep_seconds}"
+            done
+          }
+
+          require_clean_worktree() {
+            local context="$1"
+            if [ -n "$(git status --porcelain)" ]; then
+              echo "::error::Worktree is unexpectedly dirty after ${context}" >&2
+              git status -sb || true
+              exit 5
+            fi
+          }
+
+          update_metadata() {
+            local base_sha="$1"
+            local file=".bazelrc"
+            local key="UPSTREAM_COMMIT"
+
+            if grep -q "build_metadata=${key}=" "${file}"; then
+              sed -i -E "s|(build_metadata=${key}=)[^[:space:]]+|\\1${base_sha}|" "${file}"
+              return
+            fi
+
+            if grep -q "build_metadata=VISIBILITY" "${file}"; then
+              awk -v key="${key}" -v sha="${base_sha}" '
+                {print}
+                $0 ~ /build_metadata=VISIBILITY/ && !done {
+                  print "common:bb-remote --build_metadata=" key "=" sha
+                  done=1
+                }
+              ' "${file}" > "${file}.tmp" && mv "${file}.tmp" "${file}"
+            else
+              echo "common:bb-remote --build_metadata=${key}=${base_sha}" >> "${file}"
+            fi
+          }
+
+          cleanup_workflows() {
+            local workflows_dir=".github/workflows"
+
+            mkdir -p "${workflows_dir}"
+            find "${workflows_dir}" -mindepth 1 -maxdepth 1 \
+              ! -name "rbe-sync.yml" -exec rm -rf {} +
+            rm -rf .github/workflows_disabled
+          }
+
+          assert_workflow_invariants() {
+            local workflows_dir=".github/workflows"
+            if [ ! -f "${workflows_dir}/rbe-sync.yml" ]; then
+              echo "::error::Missing ${workflows_dir}/rbe-sync.yml after cleanup" >&2
+              exit 6
+            fi
+
+            local extra_workflows
+            extra_workflows=$(find "${workflows_dir}" -mindepth 1 -maxdepth 1 \
+              ! -name "rbe-sync.yml" -print)
+            if [ -n "${extra_workflows}" ]; then
+              echo "::error::Unexpected workflows remain after cleanup:" >&2
+              printf '%s\n' "${extra_workflows}" >&2
+              exit 7
+            fi
+
+            if [ -e ".github/workflows_disabled" ]; then
+              echo "::error::.github/workflows_disabled should not exist after cleanup" >&2
+              exit 8
+            fi
+          }
+
+          # Local branch for the stack of changes (direct fork).
+          git checkout -B stack direct/${STACK_BRANCH}
+          require_clean_worktree "checking out stack"
+          expected_direct_head=$(git rev-parse direct/${STACK_BRANCH})
+          expected_generated_head=$(git rev-parse origin/${BASE_BRANCH})
+
+          # Identify the upstream commit our current stack is based on.
+          old_base=$(git merge-base upstream/${BASE_BRANCH} stack)
+          if [ -z "${old_base}" ]; then
+            echo "::error::Unable to determine base between upstream/${BASE_BRANCH} and direct/${STACK_BRANCH}" >&2
+            exit 3
+          fi
+
+          # Walk new upstream commits in first-parent order (chronological).
+          new_commits=$(git rev-list --first-parent --reverse ${old_base}..upstream/${BASE_BRANCH})
+          if [ -z "${new_commits}" ]; then
+            echo "No new upstream commits; nothing to do."
+            exit 0
+          fi
+
+          echo "Found $(printf '%s\n' "${new_commits}" | wc -l | xargs) new upstream commits to process."
+
+          for new_base in ${new_commits}; do
+            echo "::group::Rebasing stack onto ${new_base}"
+
+            if ! git rebase --rebase-merges --onto ${new_base} ${old_base} stack; then
+              echo "::error::Rebase failed onto ${new_base} (from base ${old_base})" >&2
+              git status -sb || true
+              git diff --name-only --diff-filter=U || true
+              git rebase --show-current-patch || true
+              git rebase --abort || true
+              exit 4
+            fi
+            require_clean_worktree "rebasing stack onto ${new_base}"
+
+            # Create a non-ff merge commit with first parent = upstream commit.
+            git checkout -B merge-work ${new_base}
+            git merge --no-ff --no-edit stack
+            require_clean_worktree "merging stack into ${new_base}"
+
+            # Keep the fork's workflow surface minimal so upstream workflow churn
+            # does not need to live in the rebased stack history.
+            cleanup_workflows
+            assert_workflow_invariants
+
+            # Regenerate lockfile after rebasing onto new upstream base.
+            # Delete inherited lockfile first to avoid parse failures across
+            # Bazel lockfile schema changes (e.g. missing recordedInputs).
+            rm -f MODULE.bazel.lock
+            retry_command 3 5 \
+              bazel --output_base=/tmp/ob-rbe-sync mod deps --lockfile_mode=update
+
+            # Stamp BuildBuddy build_metadata with the upstream commit hash.
+            update_metadata "${new_base}"
+            git add -A .github .bazelrc MODULE.bazel.lock
+            git commit --amend --no-edit
+            require_clean_worktree "amending merge commit for ${new_base}"
+
+            # Publish the generated merge first, then checkpoint the matching
+            # direct stack. Cross-repository pushes are not atomic, but doing
+            # this for every upstream commit bounds any interrupted run to one
+            # checkpoint instead of replaying the entire upstream gap.
+            generated_head=$(git rev-parse HEAD)
+            retry_command 3 5 git push \
+              --force-with-lease=refs/heads/${BASE_BRANCH}:${expected_generated_head} \
+              origin HEAD:${BASE_BRANCH}
+            expected_generated_head=${generated_head}
+
+            old_base=${new_base}
+            git checkout stack
+            require_clean_worktree "returning to stack after ${new_base}"
+            retry_command 3 5 git push \
+              --force-with-lease=refs/heads/${STACK_BRANCH}:${expected_direct_head} \
+              direct stack:${STACK_BRANCH}
+            expected_direct_head=$(git rev-parse stack)
+            echo "::endgroup::"
+          done
