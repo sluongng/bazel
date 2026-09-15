@@ -126,6 +126,13 @@ sh_test(
         ],
     },
     shard_count = 10,
+    env = {
+        "TEST_TMPDIR": "/var/tmp",
+    },
+    exec_properties = {
+        # This test needs additional scratch space on BuildBuddy RBE.
+        "test.EstimatedFreeDiskBytes": "100GB",
+    },
     tags = [
         # MacOS does not have cgroups so it can't support hardened sandbox
         "no_macos",
@@ -210,7 +217,18 @@ sh_test(
         ":test-deps",
         "//src/test/java/com/google/devtools/build/lib/worker:ExampleWorker_deploy.jar",
     ],
+    exec_group_compatible_with = {
+        "test": ["//:highcpu_machine"],
+    },
     shard_count = 10,
+    env = {
+        "TEST_TMPDIR": "/var/tmp",
+    },
+    exec_properties = {
+        # Worker cgroup accounting needs a writable delegated cgroup hierarchy.
+        "test.workload-isolation-type": "firecracker",
+        "test.EstimatedFreeDiskBytes": "100GB",
+    },
     tags = [
         # MacOS does not have cgroups so it can't support hardened sandbox
         "no_macos",
@@ -283,7 +301,18 @@ sh_test(
         ":test-deps",
         "//src/test/java/com/google/devtools/build/lib/worker:ExampleWorker_deploy.jar",
     ],
+    exec_group_compatible_with = {
+        "test": ["//:highcpu_machine"],
+    },
     shard_count = 7,
+    env = {
+        "TEST_TMPDIR": "/var/tmp",
+    },
+    exec_properties = {
+        # Worker cgroup accounting needs a writable delegated cgroup hierarchy.
+        "test.workload-isolation-type": "firecracker",
+        "test.EstimatedFreeDiskBytes": "100GB",
+    },
     tags = [
         # MacOS does not have cgroups so it can't support hardened sandbox
         "no_macos",
@@ -389,6 +418,9 @@ sh_test(
         ":test-deps",
         "@bazel_tools//tools/bash/runfiles",
     ],
+    exec_group_compatible_with = {
+        "test": ["//:highcpu_machine"],
+    },
 )
 
 sh_test(
@@ -570,7 +602,10 @@ sh_test(
         "//src/test/shell:sandboxing_test_utils",
     ],
     exec_group_compatible_with = {
-        "test": ["//:mount_capable"],
+        "test": [
+            "//:highcpu_machine",
+            "//:mount_capable",
+        ],
     },
     shard_count = 2,
     tags = [

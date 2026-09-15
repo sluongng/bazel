@@ -98,6 +98,10 @@ genrule(
         "$$ROOT/$(location //src:bazel) --batch --output_user_root=$$TMPDIR/output_user_root query --check_direct_dependencies=error --lockfile_mode=update :all",
         "mv MODULE.bazel.lock $$ROOT/$@",
     ]),
+    exec_properties = {
+        # Module resolution downloads dependencies while regenerating the lockfile.
+        "dockerNetwork": "bridge",
+    },
     tags = ["requires-network"],
     tools = ["//src:bazel"],
 )
@@ -179,6 +183,7 @@ pkg_files(
     srcs = ["//:srcs"],
     attributes = pkg_attributes(mode = "0755"),
     excludes = [
+        "buildbuddy.yaml", # buildbuddy specific
         "MODULE.bazel.lock",  # Use MODULE.bazel.lock.dist instead
         "//examples:srcs",
         "//docs:srcs",
@@ -408,3 +413,60 @@ java_package_configuration(
     ])
 ]
 # LINT.ThenChange(//.bazelrc)
+
+# ======================
+# BuildBuddy platforms
+# ======================
+
+platform(
+    name = "bb_platform",
+    exec_properties = {
+        # Many tests assume running as a non-root user to validate different FS permissions.
+        # Disable root user by default seems like a sane thing todo here.
+        "dockerUser": "buildbuddy",
+        # Some tests need to reach BCR or download dependencies.
+        "test.dockerNetwork": "bridge",
+        # Some tests seem to require a local JDK and clang to be available.
+        "test.container-image": "docker://ghcr.io/sluongng/bazel-rbe@sha256:2242a8adaead05cb286c428167bb4f549f837dbae2a0b6fd1cf10d963118e675",
+    },
+    parents = ["@toolchains_buildbuddy//platforms:linux_x86_64"],
+)
+
+# The highcpu RBE platform where heavy actions run on. In order to
+# use this platform add the highcpu_machine constraint to your target.
+platform(
+    name = "bb_highcpu_platform",
+    constraint_values = [
+        "//:highcpu_machine",
+    ],
+    exec_properties = {
+        "test.EstimatedComputeUnits": "4",
+        "test.EstimatedMemory": "16GB",
+        "test.EstimatedFreeDiskBytes": "50GB",
+    },
+    parents = ["//:bb_platform"],
+)
+
+# Test actions that require privileged mount operations run in Firecracker.
+# Keep these separate so ordinary actions remain eligible for container workers.
+platform(
+    name = "bb_mount_platform",
+    constraint_values = [
+        "//:mount_capable",
+    ],
+    exec_properties = {
+        "test.workload-isolation-type": "firecracker",
+    },
+    parents = ["//:bb_platform"],
+)
+
+platform(
+    name = "bb_highcpu_mount_platform",
+    constraint_values = [
+        "//:mount_capable",
+    ],
+    exec_properties = {
+        "test.workload-isolation-type": "firecracker",
+    },
+    parents = ["//:bb_highcpu_platform"],
+)
