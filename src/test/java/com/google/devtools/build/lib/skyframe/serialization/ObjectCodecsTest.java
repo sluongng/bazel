@@ -27,7 +27,11 @@ import com.google.common.collect.ImmutableClassToInstanceMap;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.CodedOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -204,6 +208,84 @@ public final class ObjectCodecsTest {
     ObjectCodecs underTest = new ObjectCodecs(AutoRegistry.get(), ImmutableClassToInstanceMap.of());
     assertThat((String) underTest.deserialize(underTest.serialize("hello"))).isEqualTo("hello");
     assertThat(underTest.deserialize(underTest.serialize(null))).isNull();
+  }
+
+  @Test
+  public void memoizedStreams_preserveSharingAndWireFormat() throws Exception {
+    ObjectCodecs codecs = new ObjectCodecs(AutoRegistry.get());
+    Object shared = new Object[] {"shared"};
+    Object[] value = {shared, shared};
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    codecs.serializeMemoized(value, output);
+    assertThat(output.toByteArray()).isEqualTo(codecs.serializeMemoized(value).toByteArray());
+    Object[] restored =
+        (Object[]) codecs.deserializeMemoized(new ByteArrayInputStream(output.toByteArray()));
+    assertThat(restored[0]).isSameInstanceAs(restored[1]);
+    assertThat(restored[0]).isNotSameInstanceAs(shared);
+  }
+
+  @Test
+  public void memoizedStreams_leaveCallerStreamsOpen() throws Exception {
+    AtomicInteger closes = new AtomicInteger();
+    ByteArrayOutputStream output =
+        new ByteArrayOutputStream() {
+          @Override
+          public void close() {
+            closes.incrementAndGet();
+          }
+        };
+    underTest.serializeMemoized(12345, output);
+    InputStream input =
+        new ByteArrayInputStream(output.toByteArray()) {
+          @Override
+          public void close() {
+            closes.incrementAndGet();
+          }
+        };
+    assertThat(underTest.deserializeMemoized(input)).isEqualTo(12345);
+    assertThat(closes.get()).isEqualTo(0);
+  }
+
+  @Test
+  public void memoizedStreams_rejectTruncationAndTrailingData() throws Exception {
+    byte[] bytes = underTest.serializeMemoized(12345).toByteArray();
+    assertThrows(
+        SerializationException.class,
+        () -> underTest.deserializeMemoized(new ByteArrayInputStream(bytes, 0, bytes.length - 1)));
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    output.write(bytes);
+    output.write(0);
+    assertThrows(
+        SerializationException.class,
+        () -> underTest.deserializeMemoized(new ByteArrayInputStream(output.toByteArray())));
+  }
+
+  @Test
+  public void memoizedStreams_propagateStreamFailures() {
+    IOException failure = new IOException("stream failure");
+    OutputStream output =
+        new OutputStream() {
+          @Override
+          public void write(int value) throws IOException {
+            throw failure;
+          }
+        };
+    assertThat(
+            assertThrows(
+                SerializationException.class, () -> underTest.serializeMemoized(12345, output)))
+        .hasCauseThat()
+        .isSameInstanceAs(failure);
+    InputStream input =
+        new InputStream() {
+          @Override
+          public int read() throws IOException {
+            throw failure;
+          }
+        };
+    assertThat(
+            assertThrows(SerializationException.class, () -> underTest.deserializeMemoized(input)))
+        .hasCauseThat()
+        .isSameInstanceAs(failure);
   }
 
   private static class MyException extends Exception {}

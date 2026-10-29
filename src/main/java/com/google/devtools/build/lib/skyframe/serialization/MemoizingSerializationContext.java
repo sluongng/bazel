@@ -320,7 +320,7 @@ abstract class MemoizingSerializationContext extends SerializationContext {
     return newId;
   }
 
-  private static void serializeToStream(
+  static void serializeToStream(
       ObjectCodecRegistry codecRegistry,
       ImmutableClassToInstanceMap<Object> dependencies,
       @Nullable Object subject,

@@ -70,6 +70,24 @@ public final class DynamicCodec extends AsyncObjectCodec<Object> {
     return new DynamicCodec(type, handlers.values().toArray(FieldHandler[]::new));
   }
 
+  /**
+   * Creates a codec whose array fields use the context rather than inline array encoding.
+   *
+   * <p>With a memoizing context, shared backing arrays stay shared across distinct owners. Array
+   * codecs or reference constants must be registered for the encountered array types. This mode is
+   * not wire-compatible with the default codec for the same class; readers must use the same mode.
+   */
+  public static DynamicCodec createWithContextualArrayFields(Class<?> type) {
+    var handlers = getFieldHandlerMap(type);
+    for (var entry : handlers.entrySet()) {
+      Field field = entry.getKey();
+      if (field.getType().isArray()) {
+        entry.setValue(new ObjectHandler(field.getType(), unsafe().objectFieldOffset(field)));
+      }
+    }
+    return new DynamicCodec(type, handlers.values().toArray(FieldHandler[]::new));
+  }
+
   @Override
   public Class<?> getEncodedClass() {
     return type;

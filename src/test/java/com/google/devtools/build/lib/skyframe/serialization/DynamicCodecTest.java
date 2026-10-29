@@ -27,6 +27,7 @@ import com.google.protobuf.CodedOutputStream;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -232,6 +233,38 @@ public final class DynamicCodecTest {
                 new long[] {Long.MAX_VALUE, Long.MIN_VALUE, 27983741982341L, 52893748523495834L}))
         .addCodec(new DynamicCodec(ArrayExample.class))
         .runTests();
+  }
+
+  @Test
+  public void contextualArrayFieldsPreserveSharingAcrossDistinctOwners() throws Exception {
+    String[] shared = {"left", "right"};
+    byte[] opaque = {1, 2};
+    var codecs =
+        new ObjectCodecs(
+            ObjectCodecRegistry.newBuilder()
+                .setAllowDefaultCodec(false)
+                .add(DynamicCodec.createWithContextualArrayFields(ArrayExample.class))
+                .add(ArrayCodec.forComponentType(String.class))
+                .add(ArrayCodec.forComponentType(Object.class))
+                .addReferenceConstants(List.of("left", "right", opaque))
+                .build());
+    Object[] decoded =
+        (Object[])
+            codecs.deserializeMemoized(
+                codecs.serializeMemoized(
+                    new Object[] {
+                      new ArrayExample(shared, opaque, null, null),
+                      new ArrayExample(shared, opaque, null, null),
+                      shared
+                    }));
+    var first = (ArrayExample) decoded[0];
+    var second = (ArrayExample) decoded[1];
+    assertThat(first.text).isEqualTo(shared);
+    assertThat(first.text).isNotSameInstanceAs(shared);
+    assertThat(second.text).isSameInstanceAs(first.text);
+    assertThat(decoded[2]).isSameInstanceAs(first.text);
+    assertThat(first.numbers).isSameInstanceAs(opaque);
+    assertThat(first.chars).isNull();
   }
 
   private static class NestedArrayExample {
