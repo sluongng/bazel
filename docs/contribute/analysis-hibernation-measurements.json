@@ -1,0 +1,1074 @@
+{
+  "date": "2026-10-29",
+  "fixture": "20 rules x 1000 distinct approximately 1 KiB provider strings",
+  "runtime": "OpenJDK 27+35, G1, -Xmx1g",
+  "samples": [
+    {
+      "arm": "disabled",
+      "rep": 0,
+      "idle": {
+        "heap_committed_kib": 178176,
+        "heap_used_kib": 51596,
+        "rss_kib": 484280,
+        "pss_kib": 478445
+      },
+      "resumed": {
+        "heap_committed_kib": 178176,
+        "heap_used_kib": 51937,
+        "rss_kib": 515136,
+        "pss_kib": 509303
+      },
+      "snapshot_bytes": 0,
+      "wall_seconds": 0.1396022400003858,
+      "zero_configured": true,
+      "output_hashes": {
+        "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+        "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+        "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+        "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+        "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+        "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+        "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+        "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+        "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+        "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+        "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+        "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+        "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+        "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+        "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+        "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+        "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+        "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+        "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+        "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6"
+      }
+    },
+    {
+      "arm": "disabled",
+      "rep": 1,
+      "idle": {
+        "heap_committed_kib": 178176,
+        "heap_used_kib": 52083,
+        "rss_kib": 518468,
+        "pss_kib": 512635
+      },
+      "resumed": {
+        "heap_committed_kib": 178176,
+        "heap_used_kib": 52202,
+        "rss_kib": 524740,
+        "pss_kib": 518907
+      },
+      "snapshot_bytes": 0,
+      "wall_seconds": 0.05841643900203053,
+      "zero_configured": true,
+      "output_hashes": {
+        "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+        "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+        "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+        "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+        "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+        "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+        "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+        "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+        "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+        "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+        "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+        "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+        "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+        "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+        "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+        "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+        "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+        "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+        "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+        "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6"
+      }
+    },
+    {
+      "arm": "disabled",
+      "rep": 2,
+      "idle": {
+        "heap_committed_kib": 178176,
+        "heap_used_kib": 52314,
+        "rss_kib": 531036,
+        "pss_kib": 525203
+      },
+      "resumed": {
+        "heap_committed_kib": 178176,
+        "heap_used_kib": 52427,
+        "rss_kib": 546780,
+        "pss_kib": 540947
+      },
+      "snapshot_bytes": 0,
+      "wall_seconds": 0.055047023997758515,
+      "zero_configured": true,
+      "output_hashes": {
+        "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+        "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+        "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+        "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+        "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+        "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+        "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+        "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+        "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+        "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+        "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+        "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+        "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+        "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+        "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+        "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+        "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+        "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+        "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+        "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6"
+      }
+    },
+    {
+      "arm": "enabled",
+      "rep": 0,
+      "idle": {
+        "heap_committed_kib": 109568,
+        "heap_used_kib": 28892,
+        "rss_kib": 408308,
+        "pss_kib": 402473
+      },
+      "resumed": {
+        "heap_committed_kib": 109568,
+        "heap_used_kib": 50266,
+        "rss_kib": 441744,
+        "pss_kib": 435909
+      },
+      "snapshot_bytes": 133688,
+      "wall_seconds": 0.11382906599465059,
+      "zero_configured": true,
+      "output_hashes": {
+        "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+        "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+        "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+        "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+        "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+        "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+        "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+        "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+        "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+        "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+        "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+        "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+        "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+        "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+        "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+        "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+        "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+        "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+        "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+        "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563"
+      },
+      "timings_ms": {
+        "store": 40,
+        "restore": 15,
+        "post_detach_gc": 23
+      },
+      "timing_source": "sanitized server INFO log excerpt"
+    },
+    {
+      "arm": "enabled",
+      "rep": 1,
+      "idle": {
+        "heap_committed_kib": 99328,
+        "heap_used_kib": 29253,
+        "rss_kib": 439300,
+        "pss_kib": 433465
+      },
+      "resumed": {
+        "heap_committed_kib": 99328,
+        "heap_used_kib": 50429,
+        "rss_kib": 443116,
+        "pss_kib": 437281
+      },
+      "snapshot_bytes": 133688,
+      "wall_seconds": 0.06342230200243648,
+      "zero_configured": true,
+      "output_hashes": {
+        "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+        "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+        "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+        "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+        "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+        "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+        "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+        "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+        "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+        "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+        "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+        "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+        "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+        "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+        "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+        "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+        "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+        "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+        "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+        "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563"
+      },
+      "timings_ms": {
+        "store": 17,
+        "restore": 7,
+        "post_detach_gc": 22
+      },
+      "timing_source": "sanitized server INFO log excerpt"
+    },
+    {
+      "arm": "enabled",
+      "rep": 2,
+      "idle": {
+        "heap_committed_kib": 99328,
+        "heap_used_kib": 29527,
+        "rss_kib": 452396,
+        "pss_kib": 446561
+      },
+      "resumed": {
+        "heap_committed_kib": 99328,
+        "heap_used_kib": 50650,
+        "rss_kib": 459736,
+        "pss_kib": 453901
+      },
+      "snapshot_bytes": 133688,
+      "wall_seconds": 0.06145381699752761,
+      "zero_configured": true,
+      "output_hashes": {
+        "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+        "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+        "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+        "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+        "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+        "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+        "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+        "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+        "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+        "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+        "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+        "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+        "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+        "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+        "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+        "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+        "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+        "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+        "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+        "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563"
+      },
+      "timings_ms": {
+        "store": 14,
+        "restore": 5,
+        "post_detach_gc": 24
+      },
+      "timing_source": "sanitized server INFO log excerpt"
+    }
+  ],
+  "timing_log_excerpt": [
+    "261029 21:41:20.129:I 363 [com.google.devtools.build.lib.skyframe.AnalysisHibernation$1.run] [Analysis hibernation] stored 20 maps, 133688 bytes in 40 ms",
+    "261029 21:41:20.152:I 363 [com.google.devtools.build.lib.skyframe.AnalysisHibernation$1.run] [Analysis hibernation] post-detach GC in 23 ms",
+    "261029 21:41:32.291:I 60 [com.google.devtools.build.lib.skyframe.AnalysisHibernation.restore] [Analysis hibernation] restored 20 maps, 133688 bytes in 15 ms",
+    "261029 21:41:44.511:I 787 [com.google.devtools.build.lib.skyframe.AnalysisHibernation$1.run] [Analysis hibernation] stored 20 maps, 133688 bytes in 17 ms",
+    "261029 21:41:44.534:I 787 [com.google.devtools.build.lib.skyframe.AnalysisHibernation$1.run] [Analysis hibernation] post-detach GC in 22 ms",
+    "261029 21:41:56.585:I 60 [com.google.devtools.build.lib.skyframe.AnalysisHibernation.restore] [Analysis hibernation] restored 20 maps, 133688 bytes in 7 ms",
+    "261029 21:42:08.765:I 1081 [com.google.devtools.build.lib.skyframe.AnalysisHibernation$1.run] [Analysis hibernation] stored 20 maps, 133688 bytes in 14 ms",
+    "261029 21:42:08.790:I 1081 [com.google.devtools.build.lib.skyframe.AnalysisHibernation$1.run] [Analysis hibernation] post-detach GC in 24 ms",
+    "261029 21:42:20.843:I 60 [com.google.devtools.build.lib.skyframe.AnalysisHibernation.restore] [Analysis hibernation] restored 20 maps, 133688 bytes in 5 ms"
+  ],
+  "candidate_binary_sha256": "84065b1b066637d8835da59f40c242ae2bc17214fc15fa2bad6414a03346aec4",
+  "measurement_scope": "Shared-array snapshot codec and estimated-savings screen. Later accounting-only corrections for opaque primitive arrays and staging envelopes do not change eligibility or serialized data for this all-string fixture.",
+  "historical_runs": [
+    {
+      "name": "original inline-array implementation; historical only",
+      "data": {
+        "date": "2026-10-29",
+        "fixture": "20 rules x 1000 distinct approximately 1 KiB provider strings",
+        "runtime": "OpenJDK 27+35, G1, -Xmx1g",
+        "samples": [
+          {
+            "arm": "baseline",
+            "rep": 0,
+            "idle": {
+              "heap_committed_kib": 190464,
+              "heap_used_kib": 52393,
+              "rss_kib": 551460,
+              "pss_kib": 545584
+            },
+            "resumed": {
+              "heap_committed_kib": 190464,
+              "heap_used_kib": 52452,
+              "rss_kib": 563372,
+              "pss_kib": 557496
+            },
+            "snapshot_bytes": 0,
+            "wall_seconds": 0.06423969299794408,
+            "zero_configured": true,
+            "output_hashes": {
+              "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+              "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+              "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+              "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+              "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+              "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+              "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+              "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+              "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+              "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+              "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+              "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+              "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+              "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+              "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+              "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+              "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+              "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+              "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+              "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a"
+            }
+          },
+          {
+            "arm": "baseline",
+            "rep": 1,
+            "idle": {
+              "heap_committed_kib": 190464,
+              "heap_used_kib": 52567,
+              "rss_kib": 569488,
+              "pss_kib": 563612
+            },
+            "resumed": {
+              "heap_committed_kib": 188416,
+              "heap_used_kib": 52681,
+              "rss_kib": 574940,
+              "pss_kib": 569064
+            },
+            "snapshot_bytes": 0,
+            "wall_seconds": 0.05685736399755115,
+            "zero_configured": true,
+            "output_hashes": {
+              "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+              "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+              "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+              "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+              "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+              "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+              "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+              "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+              "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+              "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+              "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+              "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+              "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+              "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+              "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+              "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+              "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+              "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+              "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+              "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a"
+            }
+          },
+          {
+            "arm": "baseline",
+            "rep": 2,
+            "idle": {
+              "heap_committed_kib": 184320,
+              "heap_used_kib": 52794,
+              "rss_kib": 581108,
+              "pss_kib": 575231
+            },
+            "resumed": {
+              "heap_committed_kib": 184320,
+              "heap_used_kib": 52916,
+              "rss_kib": 594908,
+              "pss_kib": 589031
+            },
+            "snapshot_bytes": 0,
+            "wall_seconds": 0.0719307450017368,
+            "zero_configured": true,
+            "output_hashes": {
+              "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+              "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+              "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+              "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+              "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+              "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+              "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+              "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+              "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+              "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+              "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+              "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+              "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+              "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+              "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+              "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+              "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+              "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+              "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+              "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a"
+            }
+          },
+          {
+            "arm": "disabled",
+            "rep": 0,
+            "idle": {
+              "heap_committed_kib": 191488,
+              "heap_used_kib": 50436,
+              "rss_kib": 507532,
+              "pss_kib": 483516
+            },
+            "resumed": {
+              "heap_committed_kib": 188416,
+              "heap_used_kib": 50566,
+              "rss_kib": 513612,
+              "pss_kib": 489596
+            },
+            "snapshot_bytes": 0,
+            "wall_seconds": 0.09459841400166624,
+            "zero_configured": true,
+            "output_hashes": {
+              "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+              "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+              "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+              "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+              "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+              "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+              "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+              "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+              "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+              "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+              "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+              "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+              "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+              "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+              "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+              "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+              "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+              "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+              "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+              "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4"
+            }
+          },
+          {
+            "arm": "disabled",
+            "rep": 1,
+            "idle": {
+              "heap_committed_kib": 184320,
+              "heap_used_kib": 50682,
+              "rss_kib": 515120,
+              "pss_kib": 491103
+            },
+            "resumed": {
+              "heap_committed_kib": 181248,
+              "heap_used_kib": 50836,
+              "rss_kib": 521816,
+              "pss_kib": 497800
+            },
+            "snapshot_bytes": 0,
+            "wall_seconds": 0.06145085000025574,
+            "zero_configured": true,
+            "output_hashes": {
+              "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+              "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+              "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+              "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+              "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+              "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+              "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+              "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+              "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+              "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+              "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+              "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+              "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+              "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+              "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+              "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+              "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+              "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+              "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+              "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4"
+            }
+          },
+          {
+            "arm": "disabled",
+            "rep": 2,
+            "idle": {
+              "heap_committed_kib": 181248,
+              "heap_used_kib": 50983,
+              "rss_kib": 525860,
+              "pss_kib": 501844
+            },
+            "resumed": {
+              "heap_committed_kib": 181248,
+              "heap_used_kib": 51086,
+              "rss_kib": 531552,
+              "pss_kib": 507535
+            },
+            "snapshot_bytes": 0,
+            "wall_seconds": 0.05999262299883412,
+            "zero_configured": true,
+            "output_hashes": {
+              "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+              "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+              "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+              "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+              "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+              "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+              "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+              "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+              "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+              "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+              "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+              "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+              "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+              "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+              "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+              "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+              "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+              "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+              "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+              "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4"
+            }
+          },
+          {
+            "arm": "enabled",
+            "rep": 0,
+            "idle": {
+              "heap_committed_kib": 112640,
+              "heap_used_kib": 28832,
+              "rss_kib": 410704,
+              "pss_kib": 386695
+            },
+            "resumed": {
+              "heap_committed_kib": 112640,
+              "heap_used_kib": 50037,
+              "rss_kib": 447788,
+              "pss_kib": 423779
+            },
+            "snapshot_bytes": 133650,
+            "wall_seconds": 0.13513421999959974,
+            "zero_configured": true,
+            "output_hashes": {
+              "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+              "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+              "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+              "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+              "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+              "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+              "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+              "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+              "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+              "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+              "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+              "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+              "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+              "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+              "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+              "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+              "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+              "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+              "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+              "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e"
+            },
+            "timings_ms": {
+              "store": 41,
+              "restore": 21,
+              "post_detach_gc": 23
+            },
+            "timing_source": "same-daemon server INFO logs"
+          },
+          {
+            "arm": "enabled",
+            "rep": 1,
+            "idle": {
+              "heap_committed_kib": 99328,
+              "heap_used_kib": 29146,
+              "rss_kib": 438932,
+              "pss_kib": 414924
+            },
+            "resumed": {
+              "heap_committed_kib": 99328,
+              "heap_used_kib": 50323,
+              "rss_kib": 447120,
+              "pss_kib": 423112
+            },
+            "snapshot_bytes": 133650,
+            "wall_seconds": 0.06892843999958131,
+            "zero_configured": true,
+            "output_hashes": {
+              "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+              "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+              "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+              "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+              "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+              "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+              "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+              "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+              "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+              "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+              "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+              "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+              "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+              "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+              "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+              "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+              "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+              "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+              "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+              "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e"
+            },
+            "timings_ms": {
+              "store": 18,
+              "restore": 7,
+              "post_detach_gc": 21
+            },
+            "timing_source": "same-daemon server INFO logs"
+          },
+          {
+            "arm": "enabled",
+            "rep": 2,
+            "idle": {
+              "heap_committed_kib": 99328,
+              "heap_used_kib": 29397,
+              "rss_kib": 453724,
+              "pss_kib": 429716
+            },
+            "resumed": {
+              "heap_committed_kib": 99328,
+              "heap_used_kib": 50552,
+              "rss_kib": 457992,
+              "pss_kib": 433984
+            },
+            "snapshot_bytes": 133650,
+            "wall_seconds": 0.06566378899879055,
+            "zero_configured": true,
+            "output_hashes": {
+              "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+              "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+              "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+              "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+              "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+              "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+              "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+              "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+              "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+              "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+              "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+              "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+              "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+              "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+              "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+              "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+              "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+              "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+              "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+              "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e"
+            },
+            "timings_ms": {
+              "store": 15,
+              "restore": 6,
+              "post_detach_gc": 24
+            },
+            "timing_source": "same-daemon server INFO logs"
+          }
+        ],
+        "timing_log_excerpt": [
+          "261029 14:31:37.384:I 365 [com.google.devtools.build.lib.skyframe.AnalysisHibernation$1.run] [Analysis hibernation] stored 20 maps, 133650 bytes in 41 ms",
+          "261029 14:31:37.408:I 365 [com.google.devtools.build.lib.server.GcAndInternerShrinkingIdleTask.run] Spent 23 milliseconds doing Idle GC",
+          "261029 14:31:47.355:I 365 [com.google.devtools.build.lib.server.GcAndInternerShrinkingIdleTask.run] Spent 16 milliseconds doing Idle GC",
+          "261029 14:31:49.563:I 60 [com.google.devtools.build.lib.skyframe.AnalysisHibernation.restore] [Analysis hibernation] restored 20 maps, 133650 bytes in 21 ms",
+          "261029 14:31:59.673:I 658 [com.google.devtools.build.lib.server.GcAndInternerShrinkingIdleTask.run] Spent 19 milliseconds doing Idle GC",
+          "261029 14:32:01.810:I 801 [com.google.devtools.build.lib.skyframe.AnalysisHibernation$1.run] [Analysis hibernation] stored 20 maps, 133650 bytes in 18 ms",
+          "261029 14:32:01.832:I 801 [com.google.devtools.build.lib.server.GcAndInternerShrinkingIdleTask.run] Spent 21 milliseconds doing Idle GC",
+          "261029 14:32:11.816:I 801 [com.google.devtools.build.lib.server.GcAndInternerShrinkingIdleTask.run] Spent 24 milliseconds doing Idle GC",
+          "261029 14:32:13.888:I 60 [com.google.devtools.build.lib.skyframe.AnalysisHibernation.restore] [Analysis hibernation] restored 20 maps, 133650 bytes in 7 ms",
+          "261029 14:32:23.955:I 946 [com.google.devtools.build.lib.server.GcAndInternerShrinkingIdleTask.run] Spent 27 milliseconds doing Idle GC",
+          "261029 14:32:26.073:I 1091 [com.google.devtools.build.lib.skyframe.AnalysisHibernation$1.run] [Analysis hibernation] stored 20 maps, 133650 bytes in 15 ms",
+          "261029 14:32:26.098:I 1091 [com.google.devtools.build.lib.server.GcAndInternerShrinkingIdleTask.run] Spent 24 milliseconds doing Idle GC",
+          "261029 14:32:36.081:I 1091 [com.google.devtools.build.lib.server.GcAndInternerShrinkingIdleTask.run] Spent 23 milliseconds doing Idle GC",
+          "261029 14:32:38.154:I 60 [com.google.devtools.build.lib.skyframe.AnalysisHibernation.restore] [Analysis hibernation] restored 20 maps, 133650 bytes in 6 ms",
+          "261029 14:32:48.217:I 1239 [com.google.devtools.build.lib.server.GcAndInternerShrinkingIdleTask.run] Spent 25 milliseconds doing Idle GC"
+        ]
+      }
+    },
+    {
+      "name": "shared-array refresh pilot; some startup overlapped lifecycle validation, not primary comparison",
+      "samples": [
+        {
+          "arm": "baseline",
+          "rep": 0,
+          "idle": {
+            "heap_committed_kib": 181248,
+            "heap_used_kib": 51783,
+            "rss_kib": 438644,
+            "pss_kib": 432882
+          },
+          "resumed": {
+            "heap_committed_kib": 181248,
+            "heap_used_kib": 52151,
+            "rss_kib": 508852,
+            "pss_kib": 503090
+          },
+          "snapshot_bytes": 0,
+          "wall_seconds": 0.13621278799837455,
+          "zero_configured": true,
+          "output_hashes": {
+            "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+            "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+            "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+            "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+            "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+            "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+            "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+            "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+            "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+            "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+            "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+            "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+            "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+            "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+            "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+            "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+            "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+            "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+            "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+            "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0"
+          }
+        },
+        {
+          "arm": "baseline",
+          "rep": 1,
+          "idle": {
+            "heap_committed_kib": 178176,
+            "heap_used_kib": 52281,
+            "rss_kib": 508244,
+            "pss_kib": 502481
+          },
+          "resumed": {
+            "heap_committed_kib": 178176,
+            "heap_used_kib": 52398,
+            "rss_kib": 513944,
+            "pss_kib": 508181
+          },
+          "snapshot_bytes": 0,
+          "wall_seconds": 0.0542788630045834,
+          "zero_configured": true,
+          "output_hashes": {
+            "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+            "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+            "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+            "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+            "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+            "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+            "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+            "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+            "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+            "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+            "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+            "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+            "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+            "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+            "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+            "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+            "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+            "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+            "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+            "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0"
+          }
+        },
+        {
+          "arm": "baseline",
+          "rep": 2,
+          "idle": {
+            "heap_committed_kib": 178176,
+            "heap_used_kib": 52507,
+            "rss_kib": 514664,
+            "pss_kib": 508894
+          },
+          "resumed": {
+            "heap_committed_kib": 178176,
+            "heap_used_kib": 52612,
+            "rss_kib": 521300,
+            "pss_kib": 515530
+          },
+          "snapshot_bytes": 0,
+          "wall_seconds": 0.056139259999326896,
+          "zero_configured": true,
+          "output_hashes": {
+            "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+            "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+            "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+            "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+            "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+            "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+            "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+            "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+            "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+            "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+            "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+            "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+            "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+            "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+            "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+            "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+            "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+            "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+            "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+            "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0"
+          }
+        },
+        {
+          "arm": "disabled",
+          "rep": 0,
+          "idle": {
+            "heap_committed_kib": 184320,
+            "heap_used_kib": 50203,
+            "rss_kib": 514720,
+            "pss_kib": 508889
+          },
+          "resumed": {
+            "heap_committed_kib": 184320,
+            "heap_used_kib": 50312,
+            "rss_kib": 528712,
+            "pss_kib": 522882
+          },
+          "snapshot_bytes": 0,
+          "wall_seconds": 0.0880922959986492,
+          "zero_configured": true,
+          "output_hashes": {
+            "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+            "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+            "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+            "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+            "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+            "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+            "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+            "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+            "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+            "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+            "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+            "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+            "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+            "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+            "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+            "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+            "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+            "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+            "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+            "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6"
+          }
+        },
+        {
+          "arm": "disabled",
+          "rep": 1,
+          "idle": {
+            "heap_committed_kib": 181248,
+            "heap_used_kib": 50437,
+            "rss_kib": 532200,
+            "pss_kib": 526370
+          },
+          "resumed": {
+            "heap_committed_kib": 178176,
+            "heap_used_kib": 50551,
+            "rss_kib": 535088,
+            "pss_kib": 529258
+          },
+          "snapshot_bytes": 0,
+          "wall_seconds": 0.058595650996721815,
+          "zero_configured": true,
+          "output_hashes": {
+            "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+            "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+            "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+            "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+            "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+            "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+            "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+            "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+            "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+            "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+            "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+            "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+            "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+            "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+            "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+            "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+            "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+            "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+            "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+            "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6"
+          }
+        },
+        {
+          "arm": "disabled",
+          "rep": 2,
+          "idle": {
+            "heap_committed_kib": 178176,
+            "heap_used_kib": 50696,
+            "rss_kib": 540712,
+            "pss_kib": 534879
+          },
+          "resumed": {
+            "heap_committed_kib": 178176,
+            "heap_used_kib": 50774,
+            "rss_kib": 544404,
+            "pss_kib": 538574
+          },
+          "snapshot_bytes": 0,
+          "wall_seconds": 0.05785583899705671,
+          "zero_configured": true,
+          "output_hashes": {
+            "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e",
+            "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+            "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+            "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+            "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+            "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+            "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+            "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+            "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+            "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+            "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+            "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+            "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+            "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+            "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+            "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+            "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+            "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+            "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+            "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6"
+          }
+        },
+        {
+          "arm": "enabled",
+          "rep": 0,
+          "idle": {
+            "heap_committed_kib": 106496,
+            "heap_used_kib": 28910,
+            "rss_kib": 413296,
+            "pss_kib": 407465
+          },
+          "resumed": {
+            "heap_committed_kib": 106496,
+            "heap_used_kib": 50163,
+            "rss_kib": 440520,
+            "pss_kib": 434689
+          },
+          "snapshot_bytes": 133688,
+          "wall_seconds": 0.11059300399938365,
+          "zero_configured": true,
+          "output_hashes": {
+            "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+            "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+            "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+            "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+            "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+            "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+            "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+            "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+            "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+            "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+            "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+            "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+            "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+            "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+            "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+            "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+            "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+            "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+            "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+            "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e"
+          }
+        },
+        {
+          "arm": "enabled",
+          "rep": 1,
+          "idle": {
+            "heap_committed_kib": 99328,
+            "heap_used_kib": 29174,
+            "rss_kib": 443076,
+            "pss_kib": 437245
+          },
+          "resumed": {
+            "heap_committed_kib": 99328,
+            "heap_used_kib": 50348,
+            "rss_kib": 446516,
+            "pss_kib": 440685
+          },
+          "snapshot_bytes": 133688,
+          "wall_seconds": 0.06674097799987067,
+          "zero_configured": true,
+          "output_hashes": {
+            "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+            "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+            "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+            "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+            "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+            "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+            "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+            "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+            "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+            "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+            "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+            "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+            "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+            "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+            "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+            "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+            "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+            "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+            "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+            "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e"
+          }
+        },
+        {
+          "arm": "enabled",
+          "rep": 2,
+          "idle": {
+            "heap_committed_kib": 99328,
+            "heap_used_kib": 29427,
+            "rss_kib": 453004,
+            "pss_kib": 447173
+          },
+          "resumed": {
+            "heap_committed_kib": 99328,
+            "heap_used_kib": 50568,
+            "rss_kib": 454524,
+            "pss_kib": 448693
+          },
+          "snapshot_bytes": 133688,
+          "wall_seconds": 0.05852305299777072,
+          "zero_configured": true,
+          "output_hashes": {
+            "t11.out": "7f7ef9c9a88fd0a9c44d863eba3ad4c913a971f4d7dfe63b6f89d0b4644f0f0e",
+            "t6.out": "8a37b83c96f1aa17d63d5db633defe9edaca1d3958f2eae81c94b48be948e4f6",
+            "t13.out": "b9a0a2a26b5860dddaa079f29ba00b74d8622f90a70b28e7fd60766054bb773e",
+            "t15.out": "9990b87991e6113c7d5f866ff77dc76f1cf47be3143bbd2f5ee38e9fe280779a",
+            "t1.out": "628b49d96dcde97a430dd4f597705899e09a968f793491e4b704cae33a40dc02",
+            "t9.out": "ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92",
+            "t16.out": "36e0a2599e18a871d4b04035c8d750e9c2394a29fdb313632f14388d860daae6",
+            "t8.out": "d5fa38a1f8a14002509297c163336a28806979e6195592f4df64060dda39a9be",
+            "t19.out": "639347c6baf17d67aaac442f7e4cc5537311e8402d482373b5387a1782dd78f9",
+            "t10.out": "fda9f04c2ded017607d60770485b3f2eb5872e0f48340f2c55c5bdfcffe93602",
+            "t4.out": "a2f1a68a3cf7bab14245ba34e6a348b6822aceb4a9ec7ad04a86c2c93ca1a28a",
+            "t7.out": "3e6558d0cb97f9bd3e8a25ae442f7ef7d95de26e56b6fd69df10be97e8a21563",
+            "t18.out": "c999f738ae4e61c4a1c2202105ba91789c698a674944e87c144596d557c8fbc4",
+            "t5.out": "f413e43d74f8178745c1acb48b2741438ab9ddccf3ed0a4dd451b0419f7ba837",
+            "t0.out": "512f26ada3c3d634ac3c6b12b7b33cb50bb0963c3f6d9924241619c84ec78ff2",
+            "t12.out": "eed28849d8cea7632932ca6e83568af8f27c7adfcc61f5cb9513da81152a9ca4",
+            "t3.out": "cece8a9cecfb6c7e7ee4f3346d5e2544138bfb6e33bec6042a17333a4d3180b0",
+            "t17.out": "86046204f9ca4228377e50672eacdbcd0c6bb0acdd496c390a0a5a329b3a9f94",
+            "t14.out": "a626874bcd051257a83330bfd03ce9345924738e249b1a245630b37bedbfbbcb",
+            "t2.out": "c44474038d459e40e4714afefa7bf8dae9f9834b22f5e8ec1dd434ecb62b512e"
+          }
+        }
+      ]
+    }
+  ]
+}
