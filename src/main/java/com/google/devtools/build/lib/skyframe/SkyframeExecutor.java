@@ -411,6 +411,9 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
   SkyframeProgressReceiver progressReceiver;
   private CyclesReporter cyclesReporter = null;
 
+  // Sticky across evaluator resets: failed background work may still hold readers.
+  private boolean analysisHibernationHasBackgroundReaders;
+
   private boolean lastAnalysisDiscarded = false;
 
   /**
@@ -1223,6 +1226,11 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
 
   protected SkyframeProgressReceiver newSkyframeProgressReceiver() {
     return new SkyframeProgressReceiver();
+  }
+
+  /** Excludes this daemon after a module reports possibly unquiesced analysis readers. */
+  public void disableAnalysisHibernationForBackgroundReaders() {
+    analysisHibernationHasBackgroundReaders = true;
   }
 
   /** Reinitializes the Skyframe evaluator, dropping all previously computed values. */

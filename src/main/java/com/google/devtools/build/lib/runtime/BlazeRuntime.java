@@ -837,6 +837,12 @@ public final class BlazeRuntime implements BugReport.BlazeRuntimeInterface {
       }
     }
 
+    for (BlazeModule module : blazeModules) {
+      if (module.mayReadAnalysisAfterCommand()) {
+        workspace.getSkyframeExecutor().disableAnalysisHibernationForBackgroundReaders();
+      }
+    }
+
     env.getEventBus().post(new AfterCommandEvent());
 
     // Wipe the dependency graph if requested. Note that this method always runs at the end of
