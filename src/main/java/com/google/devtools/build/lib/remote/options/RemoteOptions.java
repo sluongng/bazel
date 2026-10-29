@@ -549,6 +549,45 @@ public abstract class RemoteOptions extends CommonRemoteOptions {
 
   public abstract void setDiskCacheGcMaxAge(Duration value);
 
+  @Option(
+      name = "experimental_output_gc",
+      defaultValue = "false",
+      documentationCategory = OptionDocumentationCategory.REMOTE,
+      effectTags = {OptionEffectTag.HOST_MACHINE_RESOURCE_OPTIMIZATIONS},
+      help =
+          "Discard cache-backed intermediate outputs from the local output tree while idle,"
+              + " preserving their metadata in the local action cache for later downloads."
+              + " Applies to all remote download modes. Local-only outputs and requested"
+              + " top-level, runfiles, and regex-selected outputs are not collected. Existing"
+              + " outputs without recorded remote metadata are retained.")
+  public abstract boolean getOutputGc();
+
+  @Option(
+      name = "experimental_output_gc_min_age",
+      defaultValue = "4h",
+      documentationCategory = OptionDocumentationCategory.REMOTE,
+      effectTags = {OptionEffectTag.HOST_MACHINE_RESOURCE_OPTIMIZATIONS},
+      converter = DurationConverter.class,
+      help = "Minimum time since an action's outputs were used by Bazel before idle output GC.")
+  public abstract Duration getOutputGcMinAge();
+
+  @Option(
+      name = "experimental_output_gc_idle_delay",
+      defaultValue = "5m",
+      documentationCategory = OptionDocumentationCategory.REMOTE,
+      effectTags = {OptionEffectTag.HOST_MACHINE_RESOURCE_OPTIMIZATIONS},
+      converter = DurationConverter.class,
+      help = "How long the server must remain idle before output garbage collection starts.")
+  public abstract Duration getOutputGcIdleDelay();
+
+  @Option(
+      name = "experimental_output_gc_dry_run",
+      defaultValue = "false",
+      documentationCategory = OptionDocumentationCategory.REMOTE,
+      effectTags = {OptionEffectTag.HOST_MACHINE_RESOURCE_OPTIMIZATIONS},
+      help = "Report eligible output-GC artifacts without deleting files or changing metadata.")
+  public abstract boolean getOutputGcDryRun();
+
   /** An enum for different levels of checks for concurrent changes. */
   public enum ConcurrentChangesCheckLevel {
     OFF,

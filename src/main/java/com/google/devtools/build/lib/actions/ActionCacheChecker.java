@@ -82,6 +82,8 @@ public class ActionCacheChecker {
 
     abstract boolean storeOutputMetadata();
 
+    abstract boolean storeOutputOwnership();
+
     /**
      * Optional target for which all actions are unconditionally executed, as requested by {@code
      * --bust_action_caches}.
@@ -90,7 +92,7 @@ public class ActionCacheChecker {
     abstract Label bustActionCachesTarget();
 
     public static Builder builder() {
-      return new AutoValue_ActionCacheChecker_CacheConfig.Builder();
+      return new AutoValue_ActionCacheChecker_CacheConfig.Builder().setStoreOutputOwnership(false);
     }
 
     /** Builder for ActionCacheChecker.CacheConfig. */
@@ -99,6 +101,8 @@ public class ActionCacheChecker {
       public abstract Builder setEnabled(boolean value);
 
       public abstract Builder setStoreOutputMetadata(boolean value);
+
+      public abstract Builder setStoreOutputOwnership(boolean value);
 
       public abstract Builder setBustActionCachesTarget(@Nullable Label value);
 
@@ -389,7 +393,11 @@ public class ActionCacheChecker {
 
         if (filesystemTreeMetadata != null) {
           // Filesystem metadata overrides the cached metadata.
-          childValues.putAll(filesystemTreeMetadata.getChildValues());
+          filesystemTreeMetadata
+              .getChildValues()
+              .forEach(
+                  (child, metadata) ->
+                      childValues.merge(child, metadata, this::mergeOutputMetadata));
           if (filesystemTreeMetadata.getArchivedRepresentation().isPresent()) {
             archivedRepresentation = filesystemTreeMetadata.getArchivedRepresentation();
           }
@@ -430,12 +438,32 @@ public class ActionCacheChecker {
 
         // Filesystem metadata overrides the cached metadata.
         mergedFileMetadata.put(
-            artifact, filesystemMetadata != null ? filesystemMetadata : cachedMetadata);
+            artifact,
+            filesystemMetadata != null
+                ? mergeOutputMetadata(cachedMetadata, filesystemMetadata)
+                : cachedMetadata);
       }
     }
 
     return new CachedOutputMetadata(
         mergedFileMetadata.buildOrThrow(), mergedTreeMetadata.buildOrThrow());
+  }
+
+  private FileArtifactValue mergeOutputMetadata(
+      FileArtifactValue cached, FileArtifactValue filesystem) {
+    // A matching local copy is still cache backed. Retain this identity on GC-enabled cache hits,
+    // including after a restart, while letting changed filesystem contents invalidate the result.
+    if (cacheConfig.storeOutputOwnership()
+        && cached.isRemote()
+        && cached.getType() == FileStateType.REGULAR_FILE
+        && filesystem.getType() == FileStateType.REGULAR_FILE
+        && cached.getResolvedPath() == null
+        && cached.getSize() == filesystem.getSize()
+        && Arrays.equals(cached.getDigest(), filesystem.getDigest())) {
+      cached.setContentsProxy(filesystem.getContentsProxy());
+      return cached;
+    }
+    return filesystem;
   }
 
   private TreeArtifactValue constructProxyTreeMetadata(TreeArtifact parent)
@@ -538,6 +566,20 @@ public class ActionCacheChecker {
         removeCacheEntry(action);
       }
       return token;
+    }
+
+    // Legacy entries did not retain local-only output paths. Backfill complete ownership on a
+    // successful hit without invalidating or reexecuting the action. Idle output collection must
+    // know these paths so stale remote metadata cannot authorize deleting a newer local output.
+    if (cacheConfig.storeOutputOwnership() && entry.getOutputPaths() == null) {
+      var entryWithKey = ActionCacheUtils.getCacheEntryWithKey(actionCache, action);
+      if (entryWithKey != null) {
+        var outputPaths = ImmutableList.<String>builder();
+        for (Artifact output : action.getOutputs()) {
+          outputPaths.add(output.getExecPathString());
+        }
+        actionCache.put(entryWithKey.getKey(), entry.withOutputPaths(outputPaths.build()));
+      }
     }
 
     // Don't store pruned inputs in the action - it costs too much memory.
@@ -707,7 +749,8 @@ public class ActionCacheChecker {
                 actionExecutionSalt,
                 outputPermissions,
                 useArchivedTreeArtifacts)
-            .setPrunedInputs(action.prunedInputs());
+            .setPrunedInputs(action.prunedInputs())
+            .setStoreOutputPaths(cacheConfig.storeOutputOwnership());
 
     for (Artifact output : action.getOutputs()) {
       // Remove old records from the cache if they used different key.
@@ -924,5 +967,4 @@ public class ActionCacheChecker {
       this.inputDigest = inputDigest;
     }
   }
-
 }

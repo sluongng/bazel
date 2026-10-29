@@ -30,6 +30,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import com.google.common.eventbus.Subscribe;
 import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -52,6 +53,7 @@ import com.google.devtools.build.lib.buildeventstream.BuildEventArtifactUploader
 import com.google.devtools.build.lib.buildeventstream.LocalFilesArtifactUploader;
 import com.google.devtools.build.lib.buildtool.BuildRequest;
 import com.google.devtools.build.lib.buildtool.BuildRequestOptions;
+import com.google.devtools.build.lib.buildtool.buildevent.BuildCompleteEvent;
 import com.google.devtools.build.lib.cmdline.LabelConstants;
 import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.Reporter;
@@ -64,6 +66,7 @@ import com.google.devtools.build.lib.remote.CombinedCacheClientFactory.CombinedC
 import com.google.devtools.build.lib.remote.LeaseService.LeaseExtension;
 import com.google.devtools.build.lib.remote.RemoteServerCapabilities.ServerCapabilitiesRequirement;
 import com.google.devtools.build.lib.remote.circuitbreaker.CircuitBreakerFactory;
+import com.google.devtools.build.lib.remote.common.RemoteActionExecutionContext;
 import com.google.devtools.build.lib.remote.common.RemoteCacheClient;
 import com.google.devtools.build.lib.remote.common.RemoteExecutionClient;
 import com.google.devtools.build.lib.remote.disk.DiskCacheClient;
@@ -145,6 +148,8 @@ public final class RemoteModule extends BlazeModule {
   @Nullable private AsynchronousMessageOutputStream<LogEntry> rpcLogFile;
   @Nullable private RemoteActionContextProvider actionContextProvider;
   @Nullable private RemoteActionInputFetcher actionInputFetcher;
+  @Nullable private OutputGarbageCollector.Task outputGcTask;
+  private boolean buildSucceeded;
   @Nullable private RemoteOptions remoteOptions;
   @Nullable private CommandEnvironment env;
   @Nullable private OutputService outputService;
@@ -385,7 +390,20 @@ public final class RemoteModule extends BlazeModule {
   }
 
   @Override
+  public void blazeShutdown() {
+    if (outputGcTask != null) {
+      outputGcTask.close();
+      outputGcTask = null;
+    }
+  }
+
+  @Override
   public void beforeCommand(CommandEnvironment env) throws AbruptExitException {
+    buildSucceeded = false;
+    if (outputGcTask != null) {
+      outputGcTask.close();
+      outputGcTask = null;
+    }
     Preconditions.checkState(actionContextProvider == null, "actionContextProvider must be null");
     Preconditions.checkState(actionInputFetcher == null, "actionInputFetcher must be null");
     Preconditions.checkState(remoteOptions == null, "remoteOptions must be null");
@@ -551,7 +569,8 @@ public final class RemoteModule extends BlazeModule {
     // TODO(bazel-team): Consider adding a warning or more validation if the remoteDownloadRegex is
     // used without Build without the Bytes.
     ImmutableList<RegexPatternOption> downloadRegexes =
-        remoteOptions.getRemoteOutputsMode() != RemoteOutputsMode.ALL
+        (remoteOptions.getRemoteOutputsMode() != RemoteOutputsMode.ALL
+                || remoteOptions.getOutputGc())
             ? ImmutableList.copyOf(remoteOptions.getRemoteDownloadRegex())
             : ImmutableList.of();
 
@@ -561,6 +580,8 @@ public final class RemoteModule extends BlazeModule {
             remoteOptions.getRemoteOutputsMode(),
             downloadRegexes,
             lastRemoteOutputChecker);
+    remoteOutputChecker.setMaterializeCachedOutputs(
+        remoteOptions.getOutputGc() && !shouldEnableRemoteOutputService(remoteOptions));
     remoteOutputChecker.maybeInvalidateSkyframeValues(env.getSkyframeExecutor().getEvaluator());
 
     env.getEventBus().register(this);
@@ -1089,9 +1110,42 @@ public final class RemoteModule extends BlazeModule {
     }
   }
 
+  @Subscribe
+  public void onBuildComplete(BuildCompleteEvent event) {
+    buildSucceeded = event.getResult().getSuccess();
+  }
+
   @Override
   public void afterCommand() {
     Preconditions.checkNotNull(blockWaitingModule, "blockWaitingModule must not be null");
+
+    if (buildSucceeded
+        && remoteOptions != null
+        && remoteOptions.getOutputGc()
+        && env.getOptions().getOptions(BuildRequestOptions.class) != null
+        && env.getOptions().getOptions(BuildRequestOptions.class).getPerformExecutionPhase()
+        && outputService instanceof RemoteOutputService
+        && actionContextProvider != null
+        && actionContextProvider.getCombinedCache() != null
+        && env.getBlazeWorkspace().getPersistentActionCache() != null) {
+      var workspace = env.getBlazeWorkspace();
+      var skyframeExecutor = env.getSkyframeExecutor();
+      outputGcTask =
+          new OutputGarbageCollector(env.getClock())
+              .createIdleTask(
+                  skyframeExecutor::getEvaluator,
+                  workspace::getPersistentActionCache,
+                  actionContextProvider.getCombinedCache(),
+                  env.getExecRoot(),
+                  remoteOutputChecker,
+                  remoteOptions.getOutputGcMinAge(),
+                  remoteOptions.getOutputGcIdleDelay(),
+                  remoteOptions.getOutputGcDryRun(),
+                  RemoteActionExecutionContext.create(
+                      TracingMetadataUtils.buildMetadata(
+                          env.getBuildRequestId(), env.getCommandId().toString(), "output-gc")));
+      env.addIdleTask(outputGcTask);
+    }
 
     // Some cleanup tasks must wait until every other BlazeModule's afterCommand() has run, as
     // otherwise we might interfere with asynchronous remote downloads that are in progress.
@@ -1206,7 +1260,10 @@ public final class RemoteModule extends BlazeModule {
               env.getSkyframeExecutor().getWalkableGraph(),
               remoteOutputChecker,
               actionInputFetcher,
-              Preconditions.checkNotNull(outputService).getRewoundActionSynchronizer()));
+              Preconditions.checkNotNull(outputService).getRewoundActionSynchronizer(),
+              remoteOptions.getOutputGc()
+                  ? env.getBlazeWorkspace()::getPersistentActionCache
+                  : null));
     }
   }
 
@@ -1291,6 +1348,7 @@ public final class RemoteModule extends BlazeModule {
 
       if (outputService instanceof RemoteOutputService remoteOutputService) {
         remoteOutputService.setRemoteOutputChecker(remoteOutputChecker);
+        remoteOutputService.setMaterializeCachedOutputs(remoteOptions.getOutputGc());
         remoteOutputService.setActionInputFetcher(
             actionInputFetcher, env.getSkyframeExecutor().getWalkableGraph());
         if (leaseService != null) {

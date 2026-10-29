@@ -46,6 +46,7 @@ import com.google.devtools.build.skyframe.MemoizingEvaluator;
 import com.google.devtools.common.options.RegexPatternOption;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import javax.annotation.Nullable;
@@ -68,10 +69,12 @@ public class RemoteOutputChecker implements OutputChecker {
   @Nullable private RemoteOutputChecker lastRemoteOutputChecker;
 
   @Nullable private Clock clock;
+  private boolean materializeCachedOutputs;
 
   private final ImmutableList<RegexPatternOption> downloadRegexes;
   private final ImmutableList<Predicate<String>> patternsToDownload;
   private final ConcurrentArtifactPathTrie pathsToDownload = new ConcurrentArtifactPathTrie();
+  private final ConcurrentArtifactPathTrie pathsToProtect = new ConcurrentArtifactPathTrie();
   private final Set<PathFragment> pathsToSkip = ConcurrentHashMap.newKeySet();
 
   public RemoteOutputChecker(
@@ -117,12 +120,27 @@ public class RemoteOutputChecker implements OutputChecker {
     this.clock = clock;
   }
 
+  /** Cached remote outputs will be materialized on an action-cache hit, if requested. */
+  void setMaterializeCachedOutputs(boolean value) {
+    materializeCachedOutputs = value;
+  }
+
+  /** Outputs explicitly requested by users must survive idle garbage collection. */
+  boolean isProtectedOutput(PathFragment path, @Nullable PathFragment treeRoot) {
+    return pathsToProtect.contains(path)
+        || pathsToDownload.contains(path)
+        || matchesPattern(path)
+        || (treeRoot != null
+            && (pathsToProtect.contains(treeRoot)
+                || pathsToDownload.contains(treeRoot)
+                || matchesPattern(treeRoot)));
+  }
+
   // Skymeld-only.
   public void afterTopLevelTargetAnalysis(
       ConfiguredTarget configuredTarget,
       Supplier<TopLevelArtifactContext> topLevelArtifactContextSupplier) {
-    if (outputsMode == RemoteOutputsMode.ALL) {
-      // For ALL, there's no need to keep track of toplevel targets - we download everything.
+    if (outputsMode == RemoteOutputsMode.ALL && !materializeCachedOutputs) {
       return;
     }
     addTopLevelTarget(configuredTarget, configuredTarget, topLevelArtifactContextSupplier);
@@ -130,8 +148,7 @@ public class RemoteOutputChecker implements OutputChecker {
 
   // Skymeld-only.
   public void afterTestAnalyzedEvent(ConfiguredTarget configuredTarget) {
-    if (outputsMode == RemoteOutputsMode.ALL) {
-      // For ALL, there's no need to keep track of toplevel targets - we download everything.
+    if (outputsMode == RemoteOutputsMode.ALL && !materializeCachedOutputs) {
       return;
     }
     addTargetUnderTest(configuredTarget);
@@ -141,8 +158,7 @@ public class RemoteOutputChecker implements OutputChecker {
   public void afterAspectAnalysis(
       ConfiguredAspect configuredAspect,
       Supplier<TopLevelArtifactContext> topLevelArtifactContextSupplier) {
-    if (outputsMode == RemoteOutputsMode.ALL) {
-      // For ALL, there's no need to keep track of toplevel targets - we download everything.
+    if (outputsMode == RemoteOutputsMode.ALL && !materializeCachedOutputs) {
       return;
     }
     addTopLevelTarget(
@@ -151,8 +167,7 @@ public class RemoteOutputChecker implements OutputChecker {
 
   // Skymeld-only.
   public void coverageArtifactsKnown(ImmutableSet<Artifact> coverageArtifacts) {
-    if (outputsMode == RemoteOutputsMode.ALL) {
-      // For ALL, there's no need to keep track of toplevel targets - we download everything.
+    if (outputsMode == RemoteOutputsMode.ALL && !materializeCachedOutputs) {
       return;
     }
     maybeAddCoverageArtifacts(coverageArtifacts);
@@ -160,8 +175,7 @@ public class RemoteOutputChecker implements OutputChecker {
 
   // Non-Skymeld only.
   public void afterAnalysis(AnalysisResult analysisResult) {
-    if (outputsMode == RemoteOutputsMode.ALL) {
-      // For ALL, there's no need to keep track of toplevel targets - we download everything.
+    if (outputsMode == RemoteOutputsMode.ALL && !materializeCachedOutputs) {
       return;
     }
     for (var target : analysisResult.getTargetsToBuild()) {
@@ -183,6 +197,15 @@ public class RemoteOutputChecker implements OutputChecker {
       ProviderCollection target,
       @Nullable ConfiguredTarget configuredTarget,
       Supplier<TopLevelArtifactContext> topLevelArtifactContextSupplier) {
+    if (materializeCachedOutputs) {
+      // Protection is independent of what this build downloads. In minimal mode a final output
+      // may already be local from an earlier build or because it is also a local action input.
+      TopLevelArtifactHelper.getAllArtifactsToBuild(target, topLevelArtifactContextSupplier.get())
+          .getImportantArtifacts()
+          .toList()
+          .forEach(pathsToProtect::add);
+      addRunfiles(target, pathsToProtect::add);
+    }
     if (shouldAddTopLevelTarget(configuredTarget)) {
       var topLevelArtifactContext = topLevelArtifactContextSupplier.get();
       var artifactsToBuild =
@@ -200,6 +223,10 @@ public class RemoteOutputChecker implements OutputChecker {
   }
 
   private void addRunfiles(ProviderCollection buildTarget) {
+    addRunfiles(buildTarget, this::addOutputToDownload);
+  }
+
+  private void addRunfiles(ProviderCollection buildTarget, Consumer<Artifact> add) {
     var runfilesProvider = buildTarget.getProvider(FilesToRunProvider.class);
     if (runfilesProvider == null) {
       return;
@@ -211,19 +238,19 @@ public class RemoteOutputChecker implements OutputChecker {
     var runfiles = runfilesSupport.getRunfiles();
     for (Artifact runfile : runfiles.getArtifacts().toList()) {
       if (mayBeRemote(runfile)) {
-        addOutputToDownload(runfile);
+        add.accept(runfile);
       }
     }
     for (var symlink : runfiles.getSymlinks().toList()) {
       var artifact = symlink.getArtifact();
       if (mayBeRemote(artifact)) {
-        addOutputToDownload(artifact);
+        add.accept(artifact);
       }
     }
     for (var symlink : runfiles.getRootSymlinks().toList()) {
       var artifact = symlink.getArtifact();
       if (mayBeRemote(artifact)) {
-        addOutputToDownload(artifact);
+        add.accept(artifact);
       }
     }
   }
@@ -403,7 +430,7 @@ public class RemoteOutputChecker implements OutputChecker {
       // requested for download in the CURRENT build (do NOT check lastRemoteOutputChecker,
       // which would incorrectly invalidate intermediate outputs that were temporarily top-level
       // in a previous build, e.g. rules_xcodeproj index builds, see issue #26924).
-      if (shouldDownloadOutput(file, metadata)) {
+      if (!materializeCachedOutputs && shouldDownloadOutput(file, metadata)) {
         return false;
       }
     }
@@ -421,19 +448,19 @@ public class RemoteOutputChecker implements OutputChecker {
   }
 
   public void maybeInvalidateSkyframeValues(MemoizingEvaluator memoizingEvaluator) {
-    if (lastRemoteOutputChecker == null) {
-      return;
+    // GC records use from completions, including clean Skyframe hits. Reevaluate completions
+    // each build while enabled, without invalidating their producing actions.
+    boolean changed = materializeCachedOutputs;
+    if (lastRemoteOutputChecker != null) {
+      boolean runTransition =
+          lastRemoteOutputChecker.commandMode == CommandMode.RUN || commandMode == CommandMode.RUN;
+      changed |=
+          lastRemoteOutputChecker.materializeCachedOutputs != materializeCachedOutputs
+              || lastRemoteOutputChecker.outputsMode != outputsMode
+              || !lastRemoteOutputChecker.downloadRegexes.equals(downloadRegexes)
+              || (lastRemoteOutputChecker.commandMode != commandMode && !runTransition);
     }
-
-    // Run mode is part of TopLevelArtifactContext, and thus of target and aspect completion keys,
-    // so transitions to and from it do not require manual invalidation. The outputs to download
-    // under the current mode and regexes are determined when a target completes, so a completed
-    // target is invalidated if either changed.
-    boolean runTransition =
-        lastRemoteOutputChecker.commandMode == CommandMode.RUN || commandMode == CommandMode.RUN;
-    if (lastRemoteOutputChecker.outputsMode != outputsMode
-        || !lastRemoteOutputChecker.downloadRegexes.equals(downloadRegexes)
-        || (lastRemoteOutputChecker.commandMode != commandMode && !runTransition)) {
+    if (changed) {
       memoizingEvaluator.delete(
           k -> {
             var functionName = k.functionName();

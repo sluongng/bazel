@@ -60,6 +60,7 @@ public class RemoteOutputService implements OutputService {
   @Nullable private RemoteOutputChecker remoteOutputChecker;
   @Nullable private RemoteActionInputFetcher actionInputFetcher;
   @Nullable private LeaseService leaseService;
+  private boolean materializeCachedOutputs;
 
   RemoteOutputService(BlazeDirectories directories, boolean rewindLostInputs) {
     this.directories = checkNotNull(directories);
@@ -176,6 +177,23 @@ public class RemoteOutputService implements OutputService {
 
     if (leaseService != null) {
       leaseService.finalizeAction();
+    }
+  }
+
+  @Override
+  public boolean shouldStoreOutputOwnershipInActionCache() {
+    return materializeCachedOutputs;
+  }
+
+  void setMaterializeCachedOutputs(boolean value) {
+    materializeCachedOutputs = value;
+  }
+
+  @Override
+  public void finalizeActionOnCacheHit(Action action, OutputMetadataStore outputMetadataStore)
+      throws IOException, LostInputsExecException, InterruptedException {
+    if (materializeCachedOutputs && actionInputFetcher != null) {
+      actionInputFetcher.finalizeAction(action, outputMetadataStore);
     }
   }
 

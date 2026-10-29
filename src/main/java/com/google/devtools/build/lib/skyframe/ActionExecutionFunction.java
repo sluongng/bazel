@@ -780,6 +780,7 @@ public class ActionExecutionFunction implements SkyFunction {
           skyframeActionExecutor.checkActionCache(
               env.getListener(),
               action,
+              actionLookupData,
               state.actionInputMetadataProvider,
               outputMetadataStore,
               pathResolver,

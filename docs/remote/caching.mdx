@@ -319,6 +319,44 @@ with `--experimental_disk_cache_gc_idle_delay` (defaulting to 5 minutes).
 As an alternative to automatic garbage collection, we also provide a [tool](https://github.com/bazelbuild/bazel/tree/master/src/tools/diskcache) to run a
 garbage collection on demand.
 
+## Idle output garbage collection {#output-gc}
+
+`--experimental_output_gc` lets the Bazel server discard local copies of
+cache-backed intermediate outputs while idle. It retains remote file and tree
+metadata in the local action cache, so a later build can download the bytes
+without executing their producing actions, as long as the cache still has them.
+This applies to `--remote_download_outputs=all`, `toplevel`, and `minimal`.
+
+For example, add the following to your `.bazelrc`:
+
+```text
+build --experimental_output_gc
+build --experimental_output_gc_min_age=4h
+build --experimental_output_gc_idle_delay=5m
+```
+
+The minimum age defaults to four hours since the action's outputs were last used
+by Bazel. Access times have minute granularity, so collection may happen up to a
+minute later. After the idle delay, the collector repeats at intervals of up to
+five minutes while the server remains idle. A new command interrupts collection.
+The server must remain running for collection to occur; batch mode does not run
+idle tasks. Use `--experimental_output_gc_dry_run` to report eligible artifacts
+and estimated bytes without removing them.
+
+Requested final outputs, runfiles, and paths selected by
+`--remote_download_regex` are protected. Local-only outputs, modified files,
+symlinks, archived trees, and trees containing untracked files are retained.
+Outputs without recorded remote metadata are also retained; enabling the flag
+does not retroactively establish cache backing for existing local files.
+The built-in output filesystem supports this feature, not an external remote
+output service.
+
+This collects the materialized output tree, not `--disk_cache` entries or local
+action-cache metadata. Cache backing is checked before removing local bytes,
+but it can expire later; normal lost-output recovery may then need to execute
+an action again. Files removed by GC are restored through Bazel, not by arbitrary
+filesystem reads outside a build.
+
 ## Known issues {#known-issues}
 
 **Input file modification during a build**

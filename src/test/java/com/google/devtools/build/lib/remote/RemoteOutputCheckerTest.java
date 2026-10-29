@@ -106,6 +106,35 @@ public class RemoteOutputCheckerTest {
   }
 
   @Test
+  public void outputGc_cachedOutputsCanBeRestoredWithoutRemoteActionLookup() {
+    var checker = new RemoteOutputChecker("build", RemoteOutputsMode.ALL, ImmutableList.of());
+    checker.setMaterializeCachedOutputs(true);
+    Artifact output = ActionsTestUtil.createArtifact(execRoot, "intermediate");
+    var metadata = FileArtifactValue.createForRemoteFile(new byte[] {1}, 1, 1);
+
+    assertThat(checker.shouldTrustCachedMetadata(output, metadata)).isTrue();
+    // Unintentional deletion still invalidates the Skyframe value, restoring its local outputs.
+    assertThat(checker.shouldTrustMetadata(output, metadata)).isFalse();
+    assertThat(checker.isProtectedOutput(output.getExecPath(), null)).isFalse();
+    checker.addOutputToDownload(output);
+    assertThat(checker.isProtectedOutput(output.getExecPath(), null)).isTrue();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void outputGc_refreshesUsesEvenWhenCompletionsWouldOtherwiseBeClean() {
+    var previous = new RemoteOutputChecker("build", RemoteOutputsMode.ALL, ImmutableList.of());
+    var checker =
+        new RemoteOutputChecker("build", RemoteOutputsMode.ALL, ImmutableList.of(), previous);
+    checker.setMaterializeCachedOutputs(true);
+    MemoizingEvaluator evaluator = mock(MemoizingEvaluator.class);
+
+    checker.maybeInvalidateSkyframeValues(evaluator);
+
+    verify(evaluator).delete(any(Predicate.class));
+  }
+
+  @Test
   public void shouldTrustMetadata_previousBuildDownloadedAll_trusted() {
     // Outputs that the current build does not want downloaded must not be distrusted
     // due to a previous invocation using a broader download policy.

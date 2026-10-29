@@ -214,6 +214,399 @@ genrule(
 EOF
 }
 
+function setup_output_gc_artifacts() {
+  mkdir -p a
+  cat > a/tree.bzl <<'EOF'
+def _tree_impl(ctx):
+    tree = ctx.actions.declare_directory(ctx.label.name)
+    ctx.actions.run_shell(
+        outputs = [tree],
+        command = "mkdir -p %s/sub && echo tree > %s/sub/child.txt" % (tree.path, tree.path),
+    )
+    return [DefaultInfo(files = depset([tree]))]
+
+tree = rule(implementation = _tree_impl)
+EOF
+  cat > a/BUILD <<'EOF'
+load(":tree.bzl", "tree")
+
+genrule(
+    name = "intermediate",
+    outs = ["intermediate.txt", "unused.txt"],
+    cmd = "echo foo > $(location intermediate.txt) && echo unused > $(location unused.txt)",
+)
+
+tree(name = "intermediate_tree")
+
+genrule(
+    name = "local_consumer",
+    srcs = ["intermediate.txt", ":intermediate_tree", "nonce"],
+    outs = ["local.txt"],
+    cmd = "cat $(location intermediate.txt) $(location :intermediate_tree)/sub/child.txt $(location nonce) > $@",
+    tags = ["no-remote"],
+)
+
+genrule(
+    name = "remote_consumer",
+    srcs = ["intermediate.txt"],
+    outs = ["remote.txt"],
+    cmd = "cat $(location intermediate.txt) > $@",
+)
+EOF
+  echo initial > a/nonce
+}
+
+function wait_for_output_gc_removal() {
+  local -r path=$1
+  local -r server_log=$2
+  local attempt
+  for attempt in $(seq 1 60); do
+    if [[ ! -e "${path}" ]]; then
+      return
+    fi
+    sleep 0.5
+  done
+  cat "${server_log}" >> "${TEST_log}"
+  fail "Expected ${path} to be garbage collected"
+}
+
+function wait_for_output_gc_eviction() {
+  local -r server_log=$1
+  local attempt
+  for attempt in $(seq 1 60); do
+    if [[ ! -e bazel-bin/a/intermediate.txt && ! -e bazel-bin/a/intermediate_tree ]]; then
+      return
+    fi
+    sleep 0.5
+  done
+  cat "${server_log}" >> "${TEST_log}"
+  fail "Expected the intermediate file and tree to be garbage collected"
+}
+
+function do_test_output_gc_restores_intermediates() {
+  local -r download_mode=$1
+  setup_output_gc_artifacts
+  local server_log
+  server_log="$(bazel info output_base 2>/dev/null)/java.log" || fail "Failed to find output base"
+  local -ar flags=(
+    --remote_executor=grpc://localhost:${worker_port}
+    --remote_download_outputs="${download_mode}"
+    --remote_accept_cached=false
+    --experimental_ui_debug_all_events
+    --experimental_output_gc
+    --experimental_output_gc_min_age=0
+  )
+
+  # The local consumer materializes both intermediates even in minimal mode.
+  bazel build "${flags[@]}" --experimental_output_gc_idle_delay=1s \
+      //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to build output GC artifacts (${download_mode})"
+
+  local restoration
+  for restoration in live restarted; do
+    # Do not issue another Bazel command while waiting: it cancels idle work.
+    wait_for_output_gc_eviction "${server_log}"
+    assert_exists bazel-bin/a/local.txt
+    if [[ "${download_mode}" != minimal ]]; then
+      assert_equals foo "$(cat bazel-bin/a/remote.txt)"
+    fi
+
+    # Keep the CAS, but remove remote action results. Re-executing a producer
+    # would repopulate this directory; restoration must use the local action cache.
+    rm -rf "${cas_path}/ac"
+    if [[ "${restoration}" == restarted ]]; then
+      bazel shutdown
+    fi
+    echo "${restoration}" > a/nonce
+    bazel build "${flags[@]}" --experimental_output_gc_idle_delay=1h \
+        //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+        || fail "Failed to restore outputs (${download_mode}, ${restoration})"
+
+    expect_not_log "Executing genrule //a:intermediate"
+    expect_not_log "Executing genrule //a:remote_consumer"
+    assert_equals 0 "$(count_remote_ac_files)"
+    assert_equals foo "$(cat bazel-bin/a/intermediate.txt)"
+    assert_equals tree "$(cat bazel-bin/a/intermediate_tree/sub/child.txt)"
+    assert_equals "$(printf 'foo\ntree\n%s' "${restoration}")" "$(cat bazel-bin/a/local.txt)"
+    if [[ "${download_mode}" == all ]]; then
+      # This sibling is not an input to either consumer, but 'all' still needs
+      # to restore it along with the intermediate action's other output.
+      assert_equals unused "$(cat bazel-bin/a/unused.txt)"
+    fi
+
+    if [[ "${restoration}" == live ]]; then
+      bazel build "${flags[@]}" --experimental_output_gc_idle_delay=1s \
+          //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+          || fail "Failed to schedule another output GC (${download_mode})"
+    fi
+  done
+}
+
+function test_output_gc_download_all() {
+  do_test_output_gc_restores_intermediates all
+}
+
+function test_output_gc_download_toplevel() {
+  do_test_output_gc_restores_intermediates toplevel
+}
+
+function test_output_gc_download_minimal() {
+  do_test_output_gc_restores_intermediates minimal
+}
+
+function test_output_gc_preserves_materialized_final_output_after_switch_to_minimal() {
+  setup_output_gc_artifacts
+  local server_log
+  server_log="$(bazel info output_base 2>/dev/null)/java.log" || fail "Failed to find output base"
+  local -ar flags=(
+    --remote_executor=grpc://localhost:${worker_port}
+    --experimental_output_gc
+    --experimental_output_gc_min_age=0
+  )
+  bazel build "${flags[@]}" --remote_download_outputs=all \
+      --experimental_output_gc_idle_delay=1h \
+      //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to materialize all outputs before switching download modes"
+  assert_equals foo "$(cat bazel-bin/a/remote.txt)"
+
+  # Minimal mode does not request a new download of remote.txt, but its existing
+  # bytes are still a requested final output and must not become GC candidates.
+  bazel build "${flags[@]}" --remote_download_outputs=minimal \
+      --experimental_output_gc_idle_delay=1s \
+      //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to switch output GC to minimal downloads"
+  wait_for_output_gc_eviction "${server_log}"
+  assert_equals foo "$(cat bazel-bin/a/remote.txt)"
+  assert_exists bazel-bin/a/local.txt
+}
+
+function test_output_gc_age_and_dry_run() {
+  setup_output_gc_artifacts
+  local server_log
+  server_log="$(bazel info output_base 2>/dev/null)/java.log" || fail "Failed to find output base"
+  local -ar flags=(
+    --remote_executor=grpc://localhost:${worker_port}
+    --remote_download_outputs=all
+    --experimental_output_gc_idle_delay=0
+  )
+
+  # Merely configuring the policy does not enable output GC.
+  bazel build "${flags[@]}" --experimental_output_gc_min_age=0 \
+      //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to build with output GC disabled"
+  sleep 1
+  assert_exists bazel-bin/a/intermediate.txt
+  assert_exists bazel-bin/a/intermediate_tree/sub/child.txt
+  bazel clean >& "${TEST_log}" || fail "Failed to clean before enabling output GC"
+
+  # With the default four-hour minimum age, newly used outputs are retained.
+  bazel build "${flags[@]}" --experimental_output_gc \
+      //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to build with the default output GC minimum age"
+  # As in the existing disk/action-cache GC tests, give the zero-delay task a
+  # chance to run. Do not wait on buffered Java log output: that can remain
+  # invisible until the short-lived integration-test server shuts down.
+  sleep 1
+  assert_exists bazel-bin/a/intermediate.txt
+  assert_exists bazel-bin/a/intermediate_tree/sub/child.txt
+
+  # A dry run considers even fresh intermediates without deleting their bytes.
+  bazel build "${flags[@]}" --experimental_output_gc \
+      --experimental_output_gc_min_age=0 --experimental_output_gc_dry_run \
+      //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to build with output GC dry run"
+  sleep 1
+  assert_exists bazel-bin/a/intermediate.txt
+  assert_exists bazel-bin/a/intermediate_tree/sub/child.txt
+
+  # Switching off dry run must actually collect the same intermediates, while
+  # preserving requested final outputs, including the non-cacheable local one.
+  bazel build "${flags[@]}" --experimental_output_gc \
+      --experimental_output_gc_min_age=0 \
+      //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to enable output GC after dry run"
+  wait_for_output_gc_eviction "${server_log}"
+  assert_exists bazel-bin/a/local.txt
+  assert_equals foo "$(cat bazel-bin/a/remote.txt)"
+}
+
+function test_output_gc_preserves_modified_and_untracked_outputs() {
+  setup_output_gc_artifacts
+  local server_log
+  server_log="$(bazel info output_base 2>/dev/null)/java.log" || fail "Failed to find output base"
+  local -ar flags=(
+    --remote_executor=grpc://localhost:${worker_port}
+    --remote_download_outputs=all
+    --experimental_output_gc
+    --experimental_output_gc_min_age=0
+    --experimental_output_gc_idle_delay=5s
+  )
+  bazel build "${flags[@]}" //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to build outputs before modifying an intermediate"
+
+  # Mutate the downloaded file before the scheduled idle task runs. Its cached
+  # digest no longer describes its bytes, so GC must leave it untouched.
+  chmod u+w bazel-bin/a/intermediate.txt
+  echo 'modified local output' > bazel-bin/a/intermediate.txt
+  wait_for_output_gc_removal bazel-bin/a/intermediate_tree "${server_log}"
+  assert_equals 'modified local output' "$(cat bazel-bin/a/intermediate.txt)"
+  assert_not_exists bazel-bin/a/intermediate_tree
+
+  bazel clean >& "${TEST_log}" || fail "Failed to clean modified outputs"
+  bazel build "${flags[@]}" --remote_download_regex='.*/a/intermediate[.]txt$' \
+      //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to build outputs with an explicit download regex"
+
+  # A tree containing files unknown to Bazel must not be removed recursively.
+  chmod u+w bazel-bin/a/intermediate_tree/sub
+  echo 'untracked local output' > bazel-bin/a/intermediate_tree/sub/untracked.txt
+  wait_for_output_gc_removal bazel-bin/a/unused.txt "${server_log}"
+  sleep 1  # Let the small collection finish inspecting the retained tree too.
+  assert_equals tree "$(cat bazel-bin/a/intermediate_tree/sub/child.txt)"
+  assert_equals 'untracked local output' "$(cat bazel-bin/a/intermediate_tree/sub/untracked.txt)"
+  assert_equals foo "$(cat bazel-bin/a/intermediate.txt)"
+  # The unprotected sibling proves collection made progress under 'all', while
+  # the regex-selected intermediate and the modified tree were preserved.
+  assert_not_exists bazel-bin/a/unused.txt
+}
+
+function test_output_gc_keeps_outputs_without_cas_backing() {
+  setup_output_gc_artifacts
+  local server_log
+  server_log="$(bazel info output_base 2>/dev/null)/java.log" || fail "Failed to find output base"
+  bazel build \
+      --remote_executor=grpc://localhost:${worker_port} \
+      --remote_download_outputs=all \
+      --experimental_output_gc \
+      --experimental_output_gc_min_age=0 \
+      --experimental_output_gc_idle_delay=5s \
+      //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to build outputs before removing CAS backing"
+
+  # Remove only this output's blob, leaving the other candidates backed by CAS.
+  # A successful collection must retain the intermediate's last local copy.
+  local digest
+  digest=$(sha256sum bazel-bin/a/intermediate.txt | cut -d' ' -f1)
+  remote_cas_file_exist "${digest}" || fail "Expected intermediate blob in remote CAS"
+  rm "${cas_path}/cas/${digest:0:2}/${digest}"
+  wait_for_output_gc_removal bazel-bin/a/intermediate_tree "${server_log}"
+  assert_equals foo "$(cat bazel-bin/a/intermediate.txt)"
+  assert_not_exists bazel-bin/a/intermediate_tree
+  assert_not_exists bazel-bin/a/unused.txt
+}
+
+function test_output_gc_recovers_when_cas_backing_is_lost_after_collection() {
+  setup_output_gc_artifacts
+  local server_log
+  server_log="$(bazel info output_base 2>/dev/null)/java.log" || fail "Failed to find output base"
+  local -ar flags=(
+    --remote_executor=grpc://localhost:${worker_port}
+    --remote_download_outputs=all
+    --remote_accept_cached=false
+    --experimental_output_gc
+    --experimental_output_gc_min_age=0
+    --experimental_remote_cache_eviction_retries=1
+  )
+  bazel build "${flags[@]}" --experimental_output_gc_idle_delay=1s \
+      //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to build outputs before collecting them"
+  wait_for_output_gc_eviction "${server_log}"
+
+  # Backing was present at collection, but may disappear before the next build.
+  # In all mode this fails while finalizing the LOCAL action-cache hit, rather
+  # than while staging an input to a newly executing consumer.
+  delete_remote_cas_files
+  bazel build "${flags[@]}" --experimental_output_gc_idle_delay=1h \
+      //a:local_consumer //a:remote_consumer >& "${TEST_log}" \
+      || fail "Failed to regenerate collected outputs after CAS eviction"
+  expect_not_log 'INTERNAL ERROR'
+  expect_not_log 'NullPointerException'
+  assert_equals foo "$(cat bazel-bin/a/intermediate.txt)"
+  assert_equals unused "$(cat bazel-bin/a/unused.txt)"
+  assert_equals tree "$(cat bazel-bin/a/intermediate_tree/sub/child.txt)"
+  assert_equals "$(printf 'foo\ntree\ninitial')" "$(cat bazel-bin/a/local.txt)"
+}
+
+function test_output_gc_preserves_local_output_replacing_remote_tree_child() {
+  setup_output_gc_artifacts
+  # Seed this control's persistent remote metadata before disabling the action
+  # cache below, so it remains a useful GC progress signal afterward.
+  cat >> a/BUILD <<'EOF'
+
+genrule(
+    name = "control",
+    outs = ["control.txt"],
+    cmd = "echo control > $@",
+)
+EOF
+  local server_log
+  server_log="$(bazel info output_base 2>/dev/null)/java.log" || fail "Failed to find output base"
+  local -ar flags=(
+    --remote_executor=grpc://localhost:${worker_port}
+    --remote_download_outputs=all
+    --experimental_output_gc
+    --experimental_output_gc_min_age=0
+  )
+  bazel build "${flags[@]}" --experimental_output_gc_idle_delay=1h \
+      //a:local_consumer //a:control >& "${TEST_log}" \
+      || fail "Failed to seed the remote tree and its persistent metadata"
+
+  # Another action now owns the same path, with identical bytes but no CAS
+  # backing. A stale remote tree entry must not authorize deleting that file.
+  cat > a/BUILD <<'EOF'
+genrule(
+    name = "local_intermediate",
+    srcs = ["ownership_nonce"],
+    outs = ["intermediate_tree/sub/child.txt"],
+    cmd = "echo tree > $@",
+    tags = ["no-remote"],
+)
+
+genrule(
+    name = "control",
+    outs = ["control.txt"],
+    cmd = "echo control > $@",
+)
+
+genrule(
+    name = "local_consumer",
+    srcs = [":local_intermediate", ":control"],
+    outs = ["local.txt"],
+    cmd = "cat $(location :local_intermediate) $(location :control) > $@",
+    tags = ["no-remote"],
+)
+EOF
+  echo uncached > a/ownership_nonce
+  bazel build "${flags[@]}" --nouse_action_cache --experimental_output_gc_idle_delay=1h \
+      //a:local_consumer >& "${TEST_log}" \
+      || fail "Failed to replace the remote tree child without using the action cache"
+
+  # Reenabling the action cache does not necessarily reevaluate the local
+  # producer. Its current Skyframe value must protect the new ownership even
+  # while the persisted cache still contains only the stale remote-tree entry.
+  bazel build "${flags[@]}" --use_action_cache --experimental_output_gc_idle_delay=1s \
+      //a:local_consumer >& "${TEST_log}" \
+      || fail "Failed to collect after reenabling the action cache"
+  wait_for_output_gc_removal bazel-bin/a/control.txt "${server_log}"
+  sleep 1
+  assert_equals tree "$(cat bazel-bin/a/intermediate_tree/sub/child.txt)"
+
+  # Force a normal execution with the same output bytes to record the local
+  # ownership durably, then verify it also protects the file after a restart.
+  echo cached > a/ownership_nonce
+  bazel build "${flags[@]}" --use_action_cache --experimental_output_gc_idle_delay=1h \
+      //a:local_consumer >& "${TEST_log}" \
+      || fail "Failed to persist local output ownership"
+  bazel shutdown
+  bazel build "${flags[@]}" --experimental_output_gc_idle_delay=1s \
+      //a:local_consumer >& "${TEST_log}" \
+      || fail "Failed to restore output ownership after restarting the server"
+  wait_for_output_gc_removal bazel-bin/a/control.txt "${server_log}"
+  sleep 1  # The stale tree entry may be visited after the control artifact.
+  assert_equals tree "$(cat bazel-bin/a/intermediate_tree/sub/child.txt)"
+  assert_equals "$(printf 'tree\ncontrol')" "$(cat bazel-bin/a/local.txt)"
+}
+
 function test_downloads_all() {
   # Tests that when using --remote_download_outputs=all both toplevel and
   # intermediate outputs are downloaded.

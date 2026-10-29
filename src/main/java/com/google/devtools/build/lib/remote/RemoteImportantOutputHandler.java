@@ -20,8 +20,13 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.devtools.build.lib.actions.Action;
+import com.google.devtools.build.lib.actions.ActionCacheUtils;
 import com.google.devtools.build.lib.actions.ActionExecutionMetadata;
 import com.google.devtools.build.lib.actions.ActionInputPrefetcher;
+import com.google.devtools.build.lib.actions.ActionLookupData;
+import com.google.devtools.build.lib.actions.ActionLookupValue;
+import com.google.devtools.build.lib.actions.ActionTemplate;
 import com.google.devtools.build.lib.actions.Actions;
 import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.actions.Artifact.DerivedArtifact;
@@ -30,20 +35,27 @@ import com.google.devtools.build.lib.actions.FileArtifactValue;
 import com.google.devtools.build.lib.actions.FileStateType;
 import com.google.devtools.build.lib.actions.ImportantOutputHandler;
 import com.google.devtools.build.lib.actions.InputMetadataProvider;
+import com.google.devtools.build.lib.actions.cache.ActionCache;
 import com.google.devtools.build.lib.profiler.SilentCloseable;
 import com.google.devtools.build.lib.remote.common.BulkTransferException;
 import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
 import com.google.devtools.build.lib.server.FailureDetails.RemoteExecution;
+import com.google.devtools.build.lib.skyframe.ActionTemplateExpansionValue;
 import com.google.devtools.build.lib.vfs.OutputService.RewoundActionSynchronizer;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.build.skyframe.WalkableGraph;
 import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Supplier;
+import javax.annotation.Nullable;
 
 /**
  * Implementation of {@link ImportantOutputHandler} for Build without the Bytes.
@@ -57,12 +69,24 @@ public final class RemoteImportantOutputHandler implements ImportantOutputHandle
   private final RemoteOutputChecker remoteOutputChecker;
   private final ActionInputPrefetcher actionInputPrefetcher;
   private final RewoundActionSynchronizer rewoundActionSynchronizer;
+  @Nullable private final Supplier<ActionCache> actionCache;
+  private final Set<ActionLookupData> touchedActions = ConcurrentHashMap.newKeySet();
 
   public RemoteImportantOutputHandler(
       WalkableGraph graph,
       RemoteOutputChecker remoteOutputChecker,
       ActionInputPrefetcher actionInputPrefetcher,
       RewoundActionSynchronizer rewoundActionSynchronizer) {
+    this(graph, remoteOutputChecker, actionInputPrefetcher, rewoundActionSynchronizer, null);
+  }
+
+  public RemoteImportantOutputHandler(
+      WalkableGraph graph,
+      RemoteOutputChecker remoteOutputChecker,
+      ActionInputPrefetcher actionInputPrefetcher,
+      RewoundActionSynchronizer rewoundActionSynchronizer,
+      @Nullable Supplier<ActionCache> actionCache) {
+    this.actionCache = actionCache;
     this.graph = graph;
     this.remoteOutputChecker = remoteOutputChecker;
     this.actionInputPrefetcher = actionInputPrefetcher;
@@ -89,6 +113,7 @@ public final class RemoteImportantOutputHandler implements ImportantOutputHandle
             Iterables.concat(
                 Iterables.transform(
                     metadataProvider.getRunfilesTrees(), tree -> tree.getArtifacts().toList())));
+    recordOutputUses(artifactsToGuard);
     try (SilentCloseable lock =
         maybeEnterProcessOutputsAndGetLostArtifacts(artifactsToGuard, metadataProvider)) {
       ensureToplevelArtifacts(importantOutputs, metadataProvider);
@@ -110,6 +135,64 @@ public final class RemoteImportantOutputHandler implements ImportantOutputHandle
               .build());
     }
     return LostArtifacts.EMPTY;
+  }
+
+  /**
+   * Cache checks alone do not observe uses of clean Skyframe values. Touch the persistent entries
+   * reachable from completed targets, including runfiles, so GC measures use rather than creation.
+   * Walk finalized action inputs, not Skyframe edges, which may be disabled for this build.
+   */
+  private void recordOutputUses(Iterable<Artifact> roots) throws InterruptedException {
+    var cache = actionCache != null ? actionCache.get() : null;
+    if (cache == null) {
+      return;
+    }
+    var pending = new ArrayDeque<Artifact>();
+    roots.forEach(pending::add);
+    while (!pending.isEmpty()) {
+      if (Thread.interrupted()) {
+        throw new InterruptedException();
+      }
+      var artifact = pending.removeLast();
+      if (!(artifact instanceof DerivedArtifact derived) || !derived.hasKnownGeneratingAction()) {
+        continue;
+      }
+      var key = derived.getGeneratingActionKey();
+      if (!touchedActions.add(key)) {
+        continue;
+      }
+      var lookup = (ActionLookupValue) graph.getValue(key.getActionLookupKey());
+      if (lookup == null) {
+        continue;
+      }
+      var generatingAction = lookup.getActions().get(key.getActionIndex());
+      if (generatingAction instanceof Action action) {
+        // Account for clean Skyframe hits, and backfill ownership in older action-cache entries.
+        var cached = ActionCacheUtils.getCacheEntryWithKey(cache, action);
+        if (cached != null && cached.getValue().getOutputPaths() == null) {
+          cache.put(
+              cached.getKey(),
+              cached
+                  .getValue()
+                  .withOutputPaths(
+                      ImmutableList.copyOf(
+                          Iterables.transform(action.getOutputs(), Artifact::getExecPathString))));
+        }
+      }
+      if (generatingAction instanceof ActionTemplate<?>) {
+        var expansion =
+            (ActionTemplateExpansionValue)
+                graph.getValue(
+                    ActionTemplateExpansionValue.key(
+                        key.getActionLookupKey(), key.getActionIndex()));
+        if (expansion != null) {
+          for (var expandedAction : expansion.getActions()) {
+            expandedAction.getOutputs().forEach(pending::add);
+          }
+        }
+      }
+      generatingAction.getInputs().toList().forEach(pending::add);
+    }
   }
 
   @Override

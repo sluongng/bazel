@@ -165,6 +165,15 @@ public interface OutputService {
   void finalizeAction(Action action, OutputMetadataStore outputMetadataStore)
       throws IOException, ExecException, InterruptedException;
 
+  /** Whether to persist output ownership for safe idle output garbage collection. */
+  default boolean shouldStoreOutputOwnershipInActionCache() {
+    return false;
+  }
+
+  /** Restore outputs after accepting persistent action metadata without executing the action. */
+  default void finalizeActionOnCacheHit(Action action, OutputMetadataStore outputMetadataStore)
+      throws IOException, ExecException, InterruptedException {}
+
   @Nullable
   BatchStat getBatchStatter();
 

@@ -35,6 +35,7 @@ import com.google.devtools.build.lib.actions.ActionInputPrefetcher.Reason;
 import com.google.devtools.build.lib.actions.Artifact.TreeArtifact;
 import com.google.devtools.build.lib.actions.Artifact.TreeFileArtifact;
 import com.google.devtools.build.lib.actions.FileArtifactValue;
+import com.google.devtools.build.lib.actions.FileContentsProxy;
 import com.google.devtools.build.lib.actions.FileStatusWithMetadata;
 import com.google.devtools.build.lib.actions.ImportantOutputHandler.LostArtifacts;
 import com.google.devtools.build.lib.actions.InputMetadataProvider;
@@ -329,6 +330,16 @@ public class RemoteActionFileSystem extends FileSystem {
         FileArtifactValue.createForRemoteFileWithMaterializationData(
             digest, size, /* locationIndex= */ 1, expirationTime, inMemoryOutput);
     remoteOutputTree.injectFile(path, metadata);
+  }
+
+  void recordMaterializedOutput(PathFragment path) throws IOException {
+    var stat = remoteOutputTree.statIfFound(path, /* followSymlinks= */ false);
+    if (stat instanceof FileStatusWithMetadata metadataStat) {
+      metadataStat
+          .getMetadata()
+          .setContentsProxy(
+              FileContentsProxy.create(localFs.getPath(path).stat(Symlinks.NOFOLLOW)));
+    }
   }
 
   @Override
@@ -652,7 +663,6 @@ public class RemoteActionFileSystem extends FileSystem {
     return statInternal(
         path, followSymlinks ? FollowMode.FOLLOW_ALL : FollowMode.FOLLOW_PARENT, StatSources.ALL);
   }
-
 
   /**
    * Internal stat implementation.

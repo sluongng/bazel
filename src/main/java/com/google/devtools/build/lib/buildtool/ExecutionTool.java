@@ -975,6 +975,7 @@ public class ExecutionTool {
                 .setEnabled(options.getUseActionCache())
                 .setStoreOutputMetadata(
                     outputService.shouldStoreRemoteOutputMetadataInActionCache())
+                .setStoreOutputOwnership(outputService.shouldStoreOutputOwnershipInActionCache())
                 .setBustActionCachesTarget(options.getBustActionCachesTarget())
                 .build()),
         actionExecutionSalt,

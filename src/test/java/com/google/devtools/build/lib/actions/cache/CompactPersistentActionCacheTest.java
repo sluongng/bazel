@@ -222,7 +222,7 @@ public class CompactPersistentActionCacheTest {
   }
 
   @Test
-  public void testRemoveIf() throws IOException {
+  public void testRemoveIf() throws IOException, InterruptedException {
     // Add 100 entries, 5 of which discover inputs, and do a full save.
     for (int i = 0; i < 100; i++) {
       putKey(Integer.toString(i), i % 20 == 0);
@@ -242,6 +242,17 @@ public class CompactPersistentActionCacheTest {
         assertThat(entry).isNotNull();
       }
     }
+
+    // Idle output collection must inspect entries without making stale entries look recently used.
+    var beforeCollection = cache.getActionTimestampMap();
+    clock.advance(Duration.ofDays(1));
+    assertThat(cache.getEntries().keySet()).containsExactlyElementsIn(beforeCollection.keySet());
+    cache
+        .getEntries()
+        .forEach(
+            (key, entry) ->
+                assertThat(entry.lastAccessTime()).isEqualTo(beforeCollection.get(key)));
+    assertThat(cache.getActionTimestampMap()).isEqualTo(beforeCollection);
 
     // Make sure we get the same result after deserializing into a new cache.
     CompactPersistentActionCache newerCache =
@@ -548,6 +559,79 @@ public class CompactPersistentActionCacheTest {
   }
 
   @Test
+  public void outputOwnership_survivesReload(@TestParameter boolean remoteMetadata)
+      throws IOException {
+    Artifact artifact = ActionsTestUtil.DUMMY_ARTIFACT;
+    FileArtifactValue metadata =
+        remoteMetadata
+            ? createRemoteMetadata(artifact, "content")
+            : createLocalMetadata(artifact, "content");
+    Entry entry =
+        builder("key")
+            .setStoreOutputPaths(true)
+            .addOutputFile(artifact, metadata, /* saveFileMetadata= */ true)
+            .build();
+    cache.put("key", entry);
+    cache.save();
+
+    var reloaded =
+        CompactPersistentActionCache.create(
+            cacheRoot, corruptedCacheRoot, tmpDir, clock, eventHandler);
+
+    assertThat(reloaded.get("key").getOutputPaths()).containsExactly(artifact.getExecPathString());
+    assertThat(reloaded.get("key").getDigest()).isEqualTo(entry.getDigest());
+    if (!remoteMetadata) {
+      assertThat(reloaded.get("key").getOutputFiles()).isEmpty();
+    }
+    verify(eventHandler, never()).handle(any());
+  }
+
+  @Test
+  public void legacyOutputOwnership_canBeBackfilledWithoutChangingResult(
+      @TestParameter boolean remoteMetadata) throws IOException {
+    Artifact artifact = ActionsTestUtil.DUMMY_ARTIFACT;
+    FileArtifactValue metadata =
+        remoteMetadata
+            ? createRemoteMetadata(artifact, "content")
+            : createLocalMetadata(artifact, "content");
+    Entry built =
+        builder("key")
+            .setStoreOutputPaths(true)
+            .addOutputFile(artifact, metadata, /* saveFileMetadata= */ true)
+            .build();
+    // The legacy constructor produces exactly the old on-disk representation: no trailing
+    // output-ownership extension, regardless of whether remote output metadata is present.
+    Entry legacy =
+        new Entry(
+            built.getDigest(),
+            built.getDiscoveredInputPaths(),
+            built.prunedInputs(),
+            built.getOutputFiles(),
+            built.getOutputTrees(),
+            built.getProxyOutputs());
+    cache.put("key", legacy);
+    cache.save();
+    cache =
+        CompactPersistentActionCache.create(
+            cacheRoot, corruptedCacheRoot, tmpDir, clock, eventHandler);
+    Entry restored = cache.get("key");
+    assertThat(restored.getOutputPaths()).isNull();
+    assertThat(restored.getDigest()).isEqualTo(built.getDigest());
+
+    Entry backfilled = restored.withOutputPaths(built.getOutputPaths());
+    cache.put("key", backfilled);
+    cache.save();
+    var reloaded =
+        CompactPersistentActionCache.create(
+            cacheRoot, corruptedCacheRoot, tmpDir, clock, eventHandler);
+
+    assertThat(reloaded.get("key").getOutputPaths()).containsExactly(artifact.getExecPathString());
+    assertThat(reloaded.get("key").getDigest()).isEqualTo(built.getDigest());
+    assertThat(reloaded.get("key").getOutputFiles()).isEqualTo(built.getOutputFiles());
+    verify(eventHandler, never()).handle(any());
+  }
+
+  @Test
   public void putAndGet_savesRemoteFileMetadata() {
     Artifact artifact = ActionsTestUtil.DUMMY_ARTIFACT;
     FileArtifactValue metadata = createRemoteMetadata(artifact, "content");
@@ -614,6 +698,7 @@ public class CompactPersistentActionCacheTest {
     entry = cache.get("key");
 
     assertThat(entry.getOutputFile(artifact)).isNull();
+    assertThat(entry.getOutputPaths()).isNull();
   }
 
   @Test

@@ -673,6 +673,28 @@ public class CompactPersistentActionCache implements ActionCache {
     timestampMap.clear();
   }
 
+  @Override
+  public ImmutableMap<String, EntryWithAccessTime> getEntries() throws InterruptedException {
+    var entries = ImmutableMap.<String, EntryWithAccessTime>builder();
+    for (var item : actionMap.entrySet()) {
+      if (Thread.interrupted()) {
+        throw new InterruptedException();
+      }
+      if (item.getKey() == VALIDATION_KEY) {
+        continue;
+      }
+      var timestamp = timestampMap.get(item.getKey());
+      var key = indexer.getStringForIndex(item.getKey());
+      if (timestamp != null && key != null) {
+        var entry = decode(item.getValue());
+        if (entry != null && !entry.isCorrupted()) {
+          entries.put(key, new EntryWithAccessTime(entry, timestamp.toInstant()));
+        }
+      }
+    }
+    return entries.buildOrThrow();
+  }
+
   /** Returns a map from action key to last access time. */
   ImmutableMap<String, Instant> getActionTimestampMap() {
     // Iterate the timestamp map, not the action map, so that the result may be used for testing
@@ -980,7 +1002,35 @@ public class CompactPersistentActionCache implements ActionCache {
       }
     }
 
+    // An optional trailing extension keeps existing entries readable without reexecuting their
+    // actions. Legacy entries have no extension and therefore unknown complete output ownership.
+    if (entry.getOutputPaths() != null) {
+      VarInt.putVarInt(entry.getOutputPaths().size(), sink);
+      for (String execPath : entry.getOutputPaths()) {
+        VarInt.putVarInt(indexer.getOrCreateIndex(execPath), sink);
+      }
+    }
+
     return sink.toByteArray();
+  }
+
+  @Nullable
+  private ImmutableList<String> decodeOutputPaths(ByteBuffer source) throws IOException {
+    if (!source.hasRemaining()) {
+      return null;
+    }
+    int count = VarInt.getVarInt(source);
+    if (count < 0 || count > source.remaining()) {
+      throw new IOException("Invalid output path count: " + count);
+    }
+    var paths = ImmutableList.<String>builderWithExpectedSize(count);
+    for (int i = 0; i < count; i++) {
+      paths.add(getStringForIndex(indexer, VarInt.getVarInt(source)));
+    }
+    if (source.hasRemaining()) {
+      throw new IOException("serialized entry data has not been fully decoded");
+    }
+    return paths.build();
   }
 
   private static String getStringForIndex(StringIndexer indexer, int index) throws IOException {
@@ -1033,16 +1083,15 @@ public class CompactPersistentActionCache implements ActionCache {
 
       int outputMetadataPresenceMarker = VarInt.getVarInt(source);
       if (outputMetadataPresenceMarker == 0) {
-        if (source.remaining() > 0) {
-          throw new IOException("serialized entry data has not been fully decoded");
-        }
+        var outputPaths = decodeOutputPaths(source);
         return new ActionCache.Entry(
             digest,
             discoveredInputPaths,
             prunedInputs,
             /* outputFileMetadata= */ ImmutableMap.of(),
             /* outputTreeMetadata= */ ImmutableMap.of(),
-            /* proxyOutputs= */ ImmutableList.of());
+            /* proxyOutputs= */ ImmutableList.of(),
+            outputPaths);
       }
 
       int numOutputFiles = VarInt.getVarInt(source);
@@ -1115,16 +1164,15 @@ public class CompactPersistentActionCache implements ActionCache {
         proxyArtifacts.add(execPath);
       }
 
-      if (source.remaining() > 0) {
-        throw new IOException("serialized entry data has not been fully decoded");
-      }
+      var outputPaths = decodeOutputPaths(source);
       return new ActionCache.Entry(
           digest,
           discoveredInputPaths,
           prunedInputs,
           outputFiles.buildOrThrow(),
           outputTrees.buildOrThrow(),
-          proxyArtifacts.build());
+          proxyArtifacts.build(),
+          outputPaths);
     } catch (BufferUnderflowException e) {
       throw new IOException("encoded entry data is incomplete", e);
     }

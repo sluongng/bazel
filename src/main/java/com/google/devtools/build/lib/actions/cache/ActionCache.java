@@ -41,6 +41,7 @@ import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -73,6 +74,17 @@ public interface ActionCache {
   @Nullable
   ActionCache.Entry get(String key);
 
+  /** An entry and its last use, for idle output garbage collection. */
+  record EntryWithAccessTime(Entry entry, Instant lastAccessTime) {}
+
+  /**
+   * Returns a snapshot without updating entry access times. Implementations without persistent
+   * output metadata may return an empty map. Only call while the cache is otherwise idle.
+   */
+  default ImmutableMap<String, EntryWithAccessTime> getEntries() throws InterruptedException {
+    return ImmutableMap.of();
+  }
+
   /** Removes entry from cache */
   void remove(String key);
 
@@ -103,6 +115,10 @@ public interface ActionCache {
     private final ImmutableMap<String, SerializableTreeArtifactValue> outputTreeMetadata;
     private final ImmutableList<String> proxyOutputs;
 
+    // All produced output paths, including local-only outputs. Null for legacy entries whose
+    // complete ownership information is unknown.
+    @Nullable private final ImmutableList<String> outputPaths;
+
     Entry(
         @Nullable byte[] digest,
         @Nullable ImmutableList<String> discoveredInputPaths,
@@ -110,6 +126,24 @@ public interface ActionCache {
         ImmutableMap<String, FileArtifactValue> outputFileMetadata,
         ImmutableMap<String, SerializableTreeArtifactValue> outputTreeMetadata,
         ImmutableList<String> proxyOutputs) {
+      this(
+          digest,
+          discoveredInputPaths,
+          prunedInputs,
+          outputFileMetadata,
+          outputTreeMetadata,
+          proxyOutputs,
+          /* outputPaths= */ null);
+    }
+
+    Entry(
+        @Nullable byte[] digest,
+        @Nullable ImmutableList<String> discoveredInputPaths,
+        boolean prunedInputs,
+        ImmutableMap<String, FileArtifactValue> outputFileMetadata,
+        ImmutableMap<String, SerializableTreeArtifactValue> outputTreeMetadata,
+        ImmutableList<String> proxyOutputs,
+        @Nullable ImmutableList<String> outputPaths) {
       checkArgument(
           !prunedInputs || discoveredInputPaths != null,
           "Action had unused inputs but no discovered inputs");
@@ -119,6 +153,7 @@ public interface ActionCache {
       this.outputFileMetadata = outputFileMetadata;
       this.outputTreeMetadata = outputTreeMetadata;
       this.proxyOutputs = proxyOutputs;
+      this.outputPaths = outputPaths;
     }
 
     /** Returns whether this cache entry is corrupted and should be ignored. */
@@ -195,6 +230,29 @@ public interface ActionCache {
       return proxyOutputs;
     }
 
+    /**
+     * Returns all output exec paths, including local-only outputs, or null when a legacy entry's
+     * complete output ownership is unknown.
+     */
+    @Nullable
+    public ImmutableList<String> getOutputPaths() {
+      checkState(!isCorrupted());
+      return outputPaths;
+    }
+
+    /** Adds ownership information without changing the cached action result or its digest. */
+    public Entry withOutputPaths(ImmutableList<String> paths) {
+      checkState(!isCorrupted());
+      return new Entry(
+          digest,
+          discoveredInputPaths,
+          prunedInputs,
+          outputFileMetadata,
+          outputTreeMetadata,
+          proxyOutputs,
+          paths);
+    }
+
     /** Returns whether this entry stores any output metadata. */
     public boolean hasOutputMetadata() {
       checkState(!isCorrupted());
@@ -211,6 +269,7 @@ public interface ActionCache {
           .add("outputFileMetadata", outputFileMetadata)
           .add("outputTreeMetadata", outputTreeMetadata)
           .add("proxyOutputs", proxyOutputs)
+          .add("outputPaths", outputPaths)
           .toString();
     }
 
@@ -307,6 +366,7 @@ public interface ActionCache {
       // Null if the action does not discover inputs.
       @Nullable private final ImmutableList.Builder<String> discoveredInputPaths;
       private boolean prunedInputs = false;
+      private boolean storeOutputPaths = false;
 
       private final ImmutableMap.Builder<String, FileArtifactValue> outputFileMetadata =
           ImmutableMap.builder();
@@ -468,6 +528,13 @@ public interface ActionCache {
         return this;
       }
 
+      /** Retains complete output ownership for opt-in idle output garbage collection. */
+      @CanIgnoreReturnValue
+      public Builder setStoreOutputPaths(boolean value) {
+        storeOutputPaths = value;
+        return this;
+      }
+
       public Entry build() {
         byte[] outputDigest = MetadataDigestUtils.fromMetadata(outputMetadataMap);
         byte[] inDigest = inputDigest();
@@ -495,7 +562,8 @@ public interface ActionCache {
             prunedInputs,
             outputFileMetadata.buildOrThrow(),
             outputTreeMetadata.buildOrThrow(),
-            proxyOutputs.build());
+            proxyOutputs.build(),
+            storeOutputPaths ? ImmutableList.sortedCopyOf(outputMetadataMap.keySet()) : null);
       }
 
       private static byte[] computeDigest(

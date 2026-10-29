@@ -858,6 +858,7 @@ public final class SkyframeActionExecutor {
   Token checkActionCache(
       ExtendedEventHandler eventHandler,
       Action action,
+      ActionLookupData actionLookupData,
       InputMetadataProvider inputMetadataProvider,
       OutputMetadataStore outputMetadataStore,
       ArtifactPathResolver artifactPathResolver,
@@ -956,6 +957,25 @@ public final class SkyframeActionExecutor {
                 // accepted hits, not hits rejected by NotifyOnActionCacheHit above.
                 token == null ? previousOutputs : null,
                 /* fileOutErr= */ null);
+        if (token == null) {
+          try {
+            outputService.finalizeActionOnCacheHit(action, outputMetadataStore);
+          } catch (LostInputsExecException e) {
+            var lost =
+                (LostInputsActionExecutionException)
+                    ActionExecutionException.fromExecException(e, action);
+            lost.setPrimaryAction(actionLookupData);
+            lost.setPrimaryOutputPath(artifactPathResolver.toPath(action.getPrimaryOutput()));
+            throw lost;
+          } catch (ExecException | IOException e) {
+            throw toActionExecutionException(
+                "unable to restore cached outputs",
+                e,
+                action,
+                null,
+                Code.ACTION_FINALIZATION_FAILURE);
+          }
+        }
         if (!eventPosted) {
           eventHandler.post(
               new CachedActionEvent(

@@ -1488,6 +1488,18 @@ public class RemoteExecutionService {
     } else {
       moveOutputsToFinalLocation(
           Iterables.transform(finishedDownloads, FileMetadata::path), realToTmpPath);
+      if (remoteOptions.getOutputGc()) {
+        for (var file : finishedDownloads) {
+          checkNotNull(remoteActionFileSystem)
+              .injectRemoteFile(
+                  file.path().asFragment(),
+                  DigestUtil.toBinaryDigest(file.digest()),
+                  file.digest().getSizeBytes(),
+                  expirationTime,
+                  /* inMemoryOutput= */ false);
+          remoteActionFileSystem.recordMaterializedOutput(file.path().asFragment());
+        }
+      }
     }
 
     List<SymlinkMetadata> symlinksInDirectories = new ArrayList<>();
