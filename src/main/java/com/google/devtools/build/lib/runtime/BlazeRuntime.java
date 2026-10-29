@@ -673,6 +673,30 @@ public final class BlazeRuntime implements BugReport.BlazeRuntimeInterface {
     return queryRuntimeHelperFactory;
   }
 
+  /** Restores idle analysis storage before any command parser or module can access the graph. */
+  public void prepareAnalysisForCommand(String commandName, @Nullable OutErr outErr)
+      throws InterruptedException {
+    var executor = workspace.getSkyframeExecutor();
+    String warning = executor.takeAnalysisHibernationWarning();
+    if (warning != null && outErr != null) {
+      outErr.printErrLn("WARNING: " + warning);
+    }
+    if (!executor.isAnalysisHibernated()) {
+      return;
+    }
+    if (commandName.equals("clean") || commandName.equals("shutdown")) {
+      executor.resetEvaluator();
+      return;
+    }
+    if (outErr != null) {
+      outErr.printErrLn("Restoring analysis cache...");
+    }
+    String restoreFailure = executor.restoreHibernatedAnalysis();
+    if (restoreFailure != null && outErr != null) {
+      outErr.printErrLn("WARNING: " + restoreFailure);
+    }
+  }
+
   /**
    * Hook method called by the BlazeCommandDispatcher prior to the dispatch of each command.
    *
@@ -890,6 +914,22 @@ public final class BlazeRuntime implements BugReport.BlazeRuntimeInterface {
       }
     }
 
+    CommonCommandOptions idleOptions = env.getOptions().getOptions(CommonCommandOptions.class);
+    if (idleOptions.getIdleAnalysisCache()
+        && keepStateAfterBuildOption.getKeepStateAfterBuild()
+        && !env.getCommandName().equals("clean")
+        && !env.getCommandName().equals("shutdown")) {
+      IdleTask task =
+          workspace
+              .getSkyframeExecutor()
+              .createAnalysisHibernationTask(
+                  idleOptions.getIdleAnalysisCacheDelay(),
+                  idleOptions.getIdleAnalysisCacheMaxSizeMb() * 1024L * 1024);
+      if (task != null) {
+        env.addIdleTask(task);
+      }
+    }
+
     ImmutableList<IdleTask> idleTasks = env.getIdleTasks();
     if (!idleTasks.isEmpty()) {
       finalCommandResult = BlazeCommandResult.withIdleTasks(finalCommandResult, idleTasks);
@@ -935,6 +975,9 @@ public final class BlazeRuntime implements BugReport.BlazeRuntimeInterface {
 
   /** Invokes {@link BlazeModule#blazeShutdown()} on all registered modules. */
   public void shutdown() {
+    if (workspace != null) {
+      workspace.getSkyframeExecutor().closeAnalysisHibernation();
+    }
     try {
       for (BlazeModule module : blazeModules) {
         module.blazeShutdown();

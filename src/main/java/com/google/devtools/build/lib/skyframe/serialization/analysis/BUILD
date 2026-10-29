@@ -72,6 +72,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/skyframe/rewinding:__pkg__",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization:__pkg__",
         "//src/test/java/com/google/devtools/build/lib/analysis/util:__pkg__",
+        "//src/test/java/com/google/devtools/build/lib/buildtool:__pkg__",
         "//src/test/java/com/google/devtools/build/lib/skyframe:__pkg__",
         "//src/test/java/com/google/devtools/build/lib/skyframe/serialization:__pkg__",
         "//src/test/java/com/google/devtools/build/lib/skyframe/serialization/analysis:__pkg__",
@@ -395,6 +396,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/runtime/commands:__pkg__",
         "//src/main/java/com/google/devtools/build/lib/skyframe:__pkg__",
         "//src/main/java/com/google/devtools/build/lib/skyframe/serialization:__pkg__",
+        "//src/test/java/com/google/devtools/build/lib/buildtool:__pkg__",
         "//src/test/java/com/google/devtools/build/lib/skyframe:__pkg__",
     ],
     deps = [
@@ -802,6 +804,7 @@ java_library(
         "//src/main/java/com/google/devtools/build/lib/buildtool:__pkg__",
         "//src/main/java/com/google/devtools/build/lib/skyframe:__pkg__",
         "//src/test/java/com/google/devtools/build/lib/analysis/util:__pkg__",
+        "//src/test/java/com/google/devtools/build/lib/buildtool:__pkg__",
         "//src/test/java/com/google/devtools/build/lib/skyframe:__pkg__",
     ],
     deps = [

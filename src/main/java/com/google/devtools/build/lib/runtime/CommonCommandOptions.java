@@ -171,6 +171,44 @@ public abstract class CommonCommandOptions extends OptionsBase {
   public abstract void setActionCacheGcMaxAge(Duration value);
 
   @Option(
+      name = "experimental_idle_analysis_cache",
+      defaultValue = "false",
+      documentationCategory = OptionDocumentationCategory.UNDOCUMENTED,
+      metadataTags = {OptionMetadataTag.EXPERIMENTAL, OptionMetadataTag.HIDDEN},
+      effectTags = {OptionEffectTag.HOST_MACHINE_RESOURCE_OPTIMIZATIONS},
+      help =
+          "Store supported analysis provider data on local disk while idle and restore it before"
+              + " the next command. Does not persist across server restarts. Unsupported with"
+              + " remote analysis caching or unquiesced background build-event uploads.")
+  public abstract boolean getIdleAnalysisCache();
+
+  @Option(
+      name = "experimental_idle_analysis_cache_delay",
+      defaultValue = "60s",
+      converter = DurationConverter.class,
+      documentationCategory = OptionDocumentationCategory.UNDOCUMENTED,
+      metadataTags = {OptionMetadataTag.EXPERIMENTAL, OptionMetadataTag.HIDDEN},
+      effectTags = {OptionEffectTag.HOST_MACHINE_RESOURCE_OPTIMIZATIONS},
+      help = "Minimum idle period before storing analysis provider data on disk.")
+  public abstract Duration getIdleAnalysisCacheDelay();
+
+  public static final class AnalysisSnapshotSizeConverter extends Converters.RangeConverter {
+    public AnalysisSnapshotSizeConverter() {
+      super(1, 1024);
+    }
+  }
+
+  @Option(
+      name = "experimental_idle_analysis_cache_max_size_mb",
+      defaultValue = "256",
+      converter = AnalysisSnapshotSizeConverter.class,
+      documentationCategory = OptionDocumentationCategory.UNDOCUMENTED,
+      metadataTags = {OptionMetadataTag.EXPERIMENTAL, OptionMetadataTag.HIDDEN},
+      effectTags = {OptionEffectTag.HOST_MACHINE_RESOURCE_OPTIMIZATIONS},
+      help = "Maximum uncompressed provider snapshot size in MiB, from 1 to 1024.")
+  public abstract int getIdleAnalysisCacheMaxSizeMb();
+
+  @Option(
       name = "experimental_enable_thread_dump",
       defaultValue = "false",
       documentationCategory = OptionDocumentationCategory.UNCATEGORIZED,

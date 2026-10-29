@@ -2439,3 +2439,18 @@ java_test(
         "//third_party/java/truth",
     ],
 )
+
+java_test(
+    name = "AnalysisHibernationTest",
+    srcs = ["AnalysisHibernationTest.java"],
+    deps = [
+        "//src/main/java/com/google/devtools/build/lib/server:idle_task",
+        "//src/main/java/com/google/devtools/build/lib/skyframe:analysis_hibernation",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis:provider_snapshot",
+        "//src/main/java/com/google/devtools/build/skyframe",
+        "//third_party/java/junit",
+        "//third_party/java/mockito",
+        "//third_party/java/truth",
+    ],
+)

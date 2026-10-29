@@ -217,6 +217,7 @@ public class BlazeRuntimeWrapper {
             "BlazeCommand %s missing command annotation",
             command.getClass());
     this.command = command;
+    runtime.prepareAnalysisForCommand(commandAnnotation.name(), /* outErr= */ null);
 
     additionalOptionsClasses.addAll(
         BlazeCommandUtils.getOptions(

@@ -393,6 +393,13 @@ public class BlazeCommandDispatcher implements CommandDispatcher {
       throws RemoteCacheTransientErrorException {
     // Record the start time for the profiler. Do not put anything before this!
     long execStartTimeNanos = runtime.getClock().nanoTime();
+    try {
+      runtime.prepareAnalysisForCommand(commandName, outErr);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return BlazeCommandResult.detailedExitCode(
+          InterruptedFailureDetails.detailedExitCode("analysis cache restoration interrupted"));
+    }
 
     Command commandAnnotation = command.getClass().getAnnotation(Command.class);
     BlazeWorkspace workspace = runtime.getWorkspace();
