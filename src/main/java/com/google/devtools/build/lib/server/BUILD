@@ -19,6 +19,7 @@ java_library(
         "IdleTask.java",
         "IdleTaskException.java",
     ],
+    deps = ["//third_party/java/jsr305_annotations"],
 )
 
 java_library(
@@ -70,6 +71,7 @@ java_library(
         "//third_party/java/guava:base",
         "//third_party/java/guava:collect",
         "//third_party/java/guava:concurrent",
+        "//third_party/java/jsr305_annotations",
     ],
 )
 

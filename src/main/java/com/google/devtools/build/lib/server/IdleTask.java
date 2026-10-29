@@ -14,6 +14,7 @@
 package com.google.devtools.build.lib.server;
 
 import java.time.Duration;
+import javax.annotation.Nullable;
 
 /** A task to be executed by {@link IdleTaskManager} while the server is idle. */
 public interface IdleTask {
@@ -44,6 +45,18 @@ public interface IdleTask {
    */
   default Duration delay() {
     return Duration.ZERO;
+  }
+
+  /**
+   * Returns how long to wait after each execution before running this task again, or {@code null}
+   * if the task should run only once during an idle period.
+   *
+   * <p>A non-null delay must be positive. Repeated executions are serialized with other idle tasks
+   * and stop when the server becomes busy.
+   */
+  @Nullable
+  default Duration repeatDelay() {
+    return null;
   }
 
   /**

@@ -20,6 +20,7 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -149,6 +150,42 @@ public class IdleTaskManagerTest {
             new IdleTask.Result("b", IdleTask.Status.SUCCESS, Duration.ZERO),
             new IdleTask.Result("c", IdleTask.Status.SUCCESS, Duration.ZERO))
         .inOrder();
+  }
+
+  @Test
+  public void registeredRepeatingTask_repeatsAndStopsWhenBusy() throws Exception {
+    AtomicInteger runCount = new AtomicInteger();
+    CountDownLatch secondRunStarted = new CountDownLatch(1);
+    IdleTask task =
+        new IdleTask() {
+          @Override
+          public String displayName() {
+            return "repeating task";
+          }
+
+          @Override
+          public Duration repeatDelay() {
+            return Duration.ofMillis(10);
+          }
+
+          @Override
+          public void run() throws InterruptedException {
+            if (runCount.incrementAndGet() == 2) {
+              secondRunStarted.countDown();
+              Thread.sleep(Duration.ofDays(1));
+            }
+          }
+        };
+    IdleTaskManager manager = new IdleTaskManager(ImmutableList.of(task));
+
+    manager.idle();
+    secondRunStarted.await();
+    ImmutableList<IdleTask.Result> stats = manager.busy();
+
+    assertThat(runCount.get()).isEqualTo(2);
+    assertThat(stats).hasSize(1);
+    assertThat(stats.get(0).name()).isEqualTo("repeating task");
+    assertThat(stats.get(0).status()).isEqualTo(IdleTask.Status.INTERRUPTED);
   }
 
   private static final void runTask(

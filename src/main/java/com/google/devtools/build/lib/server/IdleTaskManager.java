@@ -13,7 +13,9 @@
 // limitations under the License.
 package com.google.devtools.build.lib.server;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
+import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import com.google.common.base.Stopwatch;
@@ -21,15 +23,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.flogger.GoogleLogger;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.common.util.concurrent.Uninterruptibles;
-import com.google.errorprone.annotations.concurrent.GuardedBy;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
  * Runs cleanup-related tasks during an idle period in the server.
@@ -74,8 +74,7 @@ public final class IdleTaskManager {
     }
   }
 
-  @GuardedBy("this")
-  private State state = State.INITIALIZED;
+  private volatile State state = State.INITIALIZED;
 
   // Use a single-threaded ScheduledThreadPoolExecutor to ensure that tasks execute serially.
   private final ScheduledThreadPoolExecutor executor =
@@ -84,7 +83,7 @@ public final class IdleTaskManager {
 
   private final ImmutableList<IdleTask> idleTasks;
 
-  private final ArrayList<Future<IdleTask.Result>> taskFutures;
+  private final ArrayList<TaskExecution> taskExecutions;
 
   /**
    * Creates a new {@link IdleTaskManager}.
@@ -93,7 +92,7 @@ public final class IdleTaskManager {
    */
   public IdleTaskManager(ImmutableList<IdleTask> idleTasks) {
     this.idleTasks = idleTasks;
-    this.taskFutures = new ArrayList<>(idleTasks.size());
+    this.taskExecutions = new ArrayList<>(idleTasks.size());
   }
 
   /**
@@ -106,8 +105,15 @@ public final class IdleTaskManager {
     state = State.IDLE;
 
     for (IdleTask task : idleTasks) {
-      taskFutures.add(
-          executor.schedule(new IdleTaskWrapper(task), task.delay().toSeconds(), SECONDS));
+      Duration repeatDelay = task.repeatDelay();
+      checkArgument(
+          repeatDelay == null || (!repeatDelay.isNegative() && !repeatDelay.isZero()),
+          "repeatDelay must be positive for task %s: %s",
+          task.displayName(),
+          repeatDelay);
+      TaskExecution taskExecution = new TaskExecution(task, repeatDelay);
+      taskExecutions.add(taskExecution);
+      taskExecution.schedule(task.delay().toSeconds(), SECONDS);
     }
   }
 
@@ -134,25 +140,66 @@ public final class IdleTaskManager {
     for (int i = 0; i < idleTasks.size(); i++) {
       IdleTask task = idleTasks.get(i);
       String name = task.displayName();
-      Future<IdleTask.Result> future = taskFutures.get(i);
+      TaskExecution taskExecution = taskExecutions.get(i);
       IdleTask.Result result;
-      try {
-        // Don't wait: task might not have had a chance to start.
-        result = Uninterruptibles.getUninterruptibly(future, Duration.ZERO);
-      } catch (ExecutionException e) {
-        // Must be an unchecked exception since all checked exceptions thrown by an IdleTask are
-        // handled by its IdleTaskWrapper.
-        throw new IllegalStateException("Unexpected exception thrown by idle task", e.getCause());
-      } catch (TimeoutException e) {
-        // Task was never started.
-        result = new IdleTask.Result(name, IdleTask.Status.NOT_STARTED, Duration.ZERO);
-      } catch (CancellationException e) {
-        // Task was interrupted.
-        result = new IdleTask.Result(name, IdleTask.Status.INTERRUPTED, Duration.ZERO);
+      if (taskExecution.failure != null) {
+        throw new IllegalStateException(
+            "Unexpected exception thrown by idle task", taskExecution.failure);
       }
+      // For a repeated task, report the most recent completed execution. If a later scheduled
+      // repetition was cancelled before starting, retain the previous result.
+      result =
+          taskExecution.lastResult != null
+              ? taskExecution.lastResult
+              : new IdleTask.Result(name, IdleTask.Status.NOT_STARTED, Duration.ZERO);
       results.add(result);
     }
 
     return results.build();
+  }
+
+  /** Tracks the latest result and schedules another execution when requested. */
+  private final class TaskExecution implements Runnable {
+    private final IdleTask task;
+    @Nullable private final Duration repeatDelay;
+
+    @Nullable private volatile IdleTask.Result lastResult;
+    @Nullable private volatile Throwable failure;
+
+    TaskExecution(IdleTask task, @Nullable Duration repeatDelay) {
+      this.task = task;
+      this.repeatDelay = repeatDelay;
+    }
+
+    void schedule(long delay, TimeUnit unit) {
+      try {
+        var unused = executor.schedule(this, delay, unit);
+      } catch (RejectedExecutionException e) {
+        // busy() shuts the executor down after setting the state to BUSY. A racing reschedule is
+        // therefore expected to be rejected and must not interfere with the next command.
+        if (state == State.IDLE) {
+          throw e;
+        }
+      }
+    }
+
+    @Override
+    public void run() {
+      IdleTask.Result result = null;
+      try {
+        result = new IdleTaskWrapper(task).call();
+        lastResult = result;
+      } catch (RuntimeException | Error e) {
+        failure = e;
+        throw e;
+      } finally {
+        if (repeatDelay != null
+            && result != null
+            && result.status() != IdleTask.Status.INTERRUPTED
+            && state == State.IDLE) {
+          schedule(repeatDelay.toNanos(), NANOSECONDS);
+        }
+      }
+    }
   }
 }
