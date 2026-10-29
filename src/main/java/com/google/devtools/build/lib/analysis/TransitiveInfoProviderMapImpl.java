@@ -34,6 +34,10 @@ import javax.annotation.Nullable;
 /**
  * Implementation of {@link TransitiveInfoProvider} that uses {@link ImmutableSharedKeyMap}. For
  * memory efficiency, inheritance is used instead of aggregation as an implementation detail.
+ *
+ * <p>Logical contents are immutable during commands. The explicit storage lifecycle methods are
+ * only for the hibernation coordinator under command/evaluator exclusion, not general mutation.
+ * Detached and abandoned states retain keys but deliberately reject value reads.
  */
 public class TransitiveInfoProviderMapImpl extends ImmutableSharedKeyMap<Object, Object>
     implements TransitiveInfoProviderMap {
@@ -42,8 +46,73 @@ public class TransitiveInfoProviderMapImpl extends ImmutableSharedKeyMap<Object,
   static final TransitiveInfoProviderMapImpl EMPTY_TRANSITIVE_INFO_PROVIDER_MAP =
       new TransitiveInfoProviderMapImpl(new Object[0], new Object[0]);
 
+  private static final Object HIBERNATED = new Object();
+  private static final Object ABANDONED = new Object();
+
+  // The map and its interned key table stay resident. Only this slot is detached, while the
+  // coordinator excludes commands. Volatile publication also covers subsequent Skyframe workers.
+  private volatile Object providerValues;
+
   private TransitiveInfoProviderMapImpl(Object[] keys, Object[] values) {
-    super(keys, values);
+    super(keys);
+    Preconditions.checkArgument(keys.length == values.length);
+    this.providerValues = values.length == 1 ? values[0] : values;
+  }
+
+  @Override
+  protected Object getStoredValues() {
+    Object current = providerValues;
+    Preconditions.checkState(current != HIBERNATED, "provider values are hibernated");
+    Preconditions.checkState(current != ABANDONED, "provider values were abandoned after reset");
+    return current;
+  }
+
+  /** Whether this map currently has a committed on-disk payload instead of resident values. */
+  public boolean isHibernated() {
+    return providerValues == HIBERNATED;
+  }
+
+  /**
+   * Releases values after their complete snapshot commits. Requires command/evaluator exclusion.
+   * Keys and the identity of this map are unchanged; this is not an empty or cleared map.
+   */
+  public void hibernateValues() {
+    Preconditions.checkState(size() > 0, "the shared empty map cannot be hibernated");
+    getStoredValues();
+    providerValues = HIBERNATED;
+  }
+
+  /** Validates a restore without changing the live map, for transactional bulk restoration. */
+  public void checkHibernatedValues(Object[] restoredValues) {
+    Preconditions.checkState(isHibernated(), "provider values are not hibernated");
+    Preconditions.checkArgument(size() == restoredValues.length, "provider count mismatch");
+    for (Object value : restoredValues) {
+      Preconditions.checkNotNull(value, "null restored provider");
+    }
+  }
+
+  /** Reattaches a payload already validated by the coordinator, under command exclusion. */
+  public void restoreValues(Object[] restoredValues) {
+    checkHibernatedValues(restoredValues);
+    providerValues = restoredValues.length == 1 ? restoredValues[0] : restoredValues;
+  }
+
+  /** Leaves a diagnostic on stale shells after the owning graph is reset. */
+  public void abandonHibernatedValues() {
+    if (isHibernated()) {
+      providerValues = ABANDONED;
+    }
+  }
+
+  @Override
+  public String toString() {
+    return "provider map ("
+        + size()
+        + " keys, "
+        + (providerValues == HIBERNATED
+            ? "hibernated"
+            : providerValues == ABANDONED ? "abandoned" : "resident")
+        + ")";
   }
 
   static TransitiveInfoProviderMapImpl empty() {
