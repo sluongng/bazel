@@ -842,3 +842,19 @@ java_library(
     ],
     deps = ["//src/main/java/com/google/devtools/build/lib/skyframe/serialization"],
 )
+
+java_library(
+    name = "provider_snapshot",
+    srcs = ["ProviderSnapshot.java"],
+    visibility = [
+        "//src/main/java/com/google/devtools/build/lib:build_lib",
+        "//src/test/java/com/google/devtools/build/lib:test_lib",
+    ],
+    deps = [
+        "//src/main/java/com/google/devtools/build/lib/analysis:transitive_info_provider_map_impl",
+        "//src/main/java/com/google/devtools/build/lib/packages:provider",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization",
+        "//src/main/java/net/starlark/java/eval",
+        "//third_party/java/jsr305_annotations",
+    ],
+)

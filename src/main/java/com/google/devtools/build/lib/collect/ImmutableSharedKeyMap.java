@@ -44,6 +44,8 @@ import javax.annotation.concurrent.Immutable;
 public class ImmutableSharedKeyMap<K, V> implements CompactImmutableMap<K, V> {
   private static final Interner<OffsetTable<?>> offsetTables = BlazeInterners.newWeakInterner();
 
+  private static final Object EXTERNAL_VALUE_STORAGE = new Object();
+
   private final OffsetTable<K> offsetTable;
   // If size is 1, this is the value itself.
   @VisibleForSerialization protected final Object values;
@@ -106,6 +108,28 @@ public class ImmutableSharedKeyMap<K, V> implements CompactImmutableMap<K, V> {
     }
   }
 
+  /**
+   * Constructs only the immutable key layout for a subclass with its own value storage.
+   *
+   * <p>The subclass must override {@link #getStoredValues}. This avoids retaining a second copy of
+   * its values in this superclass. Ordinary maps continue to use final, inline value storage.
+   */
+  protected ImmutableSharedKeyMap(Object[] keys) {
+    this.offsetTable = createOffsetTable(keys);
+    this.values = EXTERNAL_VALUE_STORAGE;
+  }
+
+  /**
+   * Returns the singleton value, or the backing value array for all other sizes.
+   *
+   * <p>Subclasses providing external storage must preserve immutable observable map contents and
+   * arrange exclusion and safe publication around any quiescent storage transition.
+   */
+  protected Object getStoredValues() {
+    Preconditions.checkState(values != EXTERNAL_VALUE_STORAGE, "missing external value storage");
+    return values;
+  }
+
   @SuppressWarnings("unchecked")
   private static <K> OffsetTable<K> createOffsetTable(Object[] keys) {
     OffsetTable<K> offsetTable = new OffsetTable<>(keys);
@@ -121,6 +145,7 @@ public class ImmutableSharedKeyMap<K, V> implements CompactImmutableMap<K, V> {
     if (offset == -1) {
       return null;
     }
+    Object values = getStoredValues();
     int size = offsetTable.keys.length;
     if (size == 1) {
       return (V) values;
@@ -142,6 +167,7 @@ public class ImmutableSharedKeyMap<K, V> implements CompactImmutableMap<K, V> {
   @SuppressWarnings("unchecked")
   @Override
   public V valueAt(int index) {
+    Object values = getStoredValues();
     int size = offsetTable.keys.length;
     if (size == 1) {
       Preconditions.checkElementIndex(index, 1);
@@ -161,6 +187,7 @@ public class ImmutableSharedKeyMap<K, V> implements CompactImmutableMap<K, V> {
   @Deprecated
   @VisibleForSerialization
   public Object[] getValuesAsArray() {
+    Object values = getStoredValues();
     int size = offsetTable.keys.length;
     if (size == 1) {
       return new Object[] {values};
@@ -181,15 +208,17 @@ public class ImmutableSharedKeyMap<K, V> implements CompactImmutableMap<K, V> {
     if (offsetTable != that.offsetTable) {
       return false;
     }
+    Object values = getStoredValues();
     int size = offsetTable.keys.length;
     if (size == 1) {
-      return Objects.equals(values, that.values);
+      return Objects.equals(values, that.getStoredValues());
     }
-    return Arrays.equals((Object[]) values, (Object[]) that.values);
+    return Arrays.equals((Object[]) values, (Object[]) that.getStoredValues());
   }
 
   @Override
   public int hashCode() {
+    Object values = getStoredValues();
     int size = offsetTable.keys.length;
     if (size == 1) {
       return Objects.hash(offsetTable, values);

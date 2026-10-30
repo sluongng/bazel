@@ -378,3 +378,20 @@ java_test(
         "//third_party/java/truth",
     ],
 )
+
+java_test(
+    name = "ProviderSnapshotTest",
+    srcs = ["ProviderSnapshotTest.java"],
+    deps = [
+        "//src/main/java/com/google/devtools/build/lib/analysis:transitive_info_provider_map_builder",
+        "//src/main/java/com/google/devtools/build/lib/analysis:transitive_info_provider_map_impl",
+        "//src/main/java/com/google/devtools/build/lib/collect/nestedset",
+        "//src/main/java/com/google/devtools/build/lib/packages:provider",
+        "//src/main/java/com/google/devtools/build/lib/skyframe/serialization/analysis:provider_snapshot",
+        "//src/main/java/net/starlark/java/eval",
+        "//third_party/java/guava:collect",
+        "//third_party/java/guava:testing",
+        "//third_party/java/junit",
+        "//third_party/java/truth",
+    ],
+)

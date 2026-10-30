@@ -13,6 +13,9 @@
 // limitations under the License.
 package com.google.devtools.build.lib.analysis;
 
+import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.skyframe.serialization.testutils.SerializationTester;
 import com.google.testing.junit.testparameterinjector.TestParameter;
@@ -22,6 +25,47 @@ import org.junit.runner.RunWith;
 
 @RunWith(TestParameterInjector.class)
 public final class TransitiveInfoProviderMapImplCodecTest {
+
+  @Test
+  public void hibernationPreservesMapKeysIdentityAndHash(@TestParameter boolean singleton) {
+    var original =
+        singleton
+            ? ImmutableMap.<Object, Object>of("a", "first")
+            : ImmutableMap.<Object, Object>of("a", "first", "b", "second");
+    var map = TransitiveInfoProviderMapImpl.create(original);
+    var equalMap = TransitiveInfoProviderMapImpl.create(original);
+    int hash = map.hashCode();
+    Object[] values = map.getValuesAsArray();
+    map.hibernateValues();
+    assertThat(map.getProviderCount()).isEqualTo(original.size());
+    assertThat(map.getProviderKeyAt(0)).isEqualTo("a");
+    assertThat(map.toString()).contains("hibernated");
+    assertThrows(IllegalStateException.class, () -> map.get("a"));
+    assertThrows(IllegalArgumentException.class, () -> map.restoreValues(new Object[0]));
+    assertThat(map.isHibernated()).isTrue();
+    map.restoreValues(values);
+    assertThat(map.get("a")).isEqualTo("first");
+    assertThat(map).isEqualTo(equalMap);
+    assertThat(map.hashCode()).isEqualTo(hash);
+    assertThrows(IllegalStateException.class, () -> map.restoreValues(values));
+  }
+
+  @Test
+  public void emptyMapCannotBeHibernated() {
+    assertThrows(
+        IllegalStateException.class, () -> TransitiveInfoProviderMapImpl.empty().hibernateValues());
+  }
+
+  @Test
+  public void abandonedMapFailsWithDiagnostic() {
+    var map = TransitiveInfoProviderMapImpl.create(ImmutableMap.of("a", "value"));
+    map.hibernateValues();
+    map.abandonHibernatedValues();
+    assertThat(map.toString()).contains("abandoned");
+    assertThat(assertThrows(IllegalStateException.class, () -> map.get("a")))
+        .hasMessageThat()
+        .contains("abandoned");
+  }
 
   @Test
   public void serialization(@TestParameter boolean useSharedValues) throws Exception {
