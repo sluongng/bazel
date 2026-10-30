@@ -76,9 +76,11 @@ public class MiscAnalysisTest extends BuildIntegrationTestCase {
         Empty = provider(fields = [])
         Many = provider(fields = ["a", "b", "c", "d", "e", "f"])
         def _impl(ctx):
+            out = ctx.actions.declare_file(ctx.label.name + ".out")
+            ctx.actions.write(out, ctx.attr.text)
             return [Payload(text = ctx.attr.text * 2000), Empty(),
                     Many(a = (ctx.attr.text, "tuple"), b = None, c = None,
-                         d = None, e = None, f = None)]
+                         d = None, e = None, f = None), DefaultInfo(files = depset([out]))]
         payload_rule = rule(implementation = _impl, attrs = {"text": attr.string()})
         """);
     write(
@@ -121,14 +123,23 @@ public class MiscAnalysisTest extends BuildIntegrationTestCase {
   public void idleAnalysisSnapshot_restoresUnchangedTargetAndAliasWithoutReanalysis()
       throws Exception {
     writeHibernationFixture("first");
+    addOptions("--build");
     buildTarget("//hib:target");
     ConfiguredTarget original = getConfiguredTarget("//hib:dep");
     var map = providerMap(original);
+    var output = getArtifact("//hib:dep", ".out");
+    var action = getGeneratingAction(output);
+    var execution = getActionExecutionValue(output);
+    assertThat(readContentAsLatin1String(output)).isEqualTo("first");
     hibernateAnalysis();
     assertThat(map.isHibernated()).isTrue();
     buildTarget("//hib:target");
     assertThat(getConfiguredTarget("//hib:dep")).isSameInstanceAs(original);
     assertThat(providerMap(original)).isSameInstanceAs(map);
+    assertThat(getArtifact("//hib:dep", ".out")).isSameInstanceAs(output);
+    assertThat(getGeneratingAction(output)).isSameInstanceAs(action);
+    assertThat(getActionExecutionValue(output)).isSameInstanceAs(execution);
+    assertThat(readContentAsLatin1String(output)).isEqualTo("first");
     assertThat(payloadText(original)).isEqualTo("first".repeat(2000));
     assertThat(providerInfo(map, "Empty").getFieldNames()).isEmpty();
     var many = providerInfo(map, "Many");
@@ -138,6 +149,8 @@ public class MiscAnalysisTest extends BuildIntegrationTestCase {
     hibernateAnalysis();
     buildTarget("//hib:target");
     assertThat(getConfiguredTarget("//hib:dep")).isSameInstanceAs(original);
+    assertThat(getGeneratingAction(output)).isSameInstanceAs(action);
+    assertThat(getActionExecutionValue(output)).isSameInstanceAs(execution);
   }
 
   @Test
