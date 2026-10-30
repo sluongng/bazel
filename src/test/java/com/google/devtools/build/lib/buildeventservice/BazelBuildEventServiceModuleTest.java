@@ -277,6 +277,8 @@ public final class BazelBuildEventServiceModuleTest extends BuildIntegrationTest
     runBuildWithOptions("--build_event_text_file=" + tmpFolder.newFile().getAbsolutePath());
     assertThat(getBepTransports()).hasSize(1);
     assertThat(getBepTransports().asList().get(0)).isInstanceOf(TextFormatFileTransport.class);
+    afterBuildCommand();
+    assertThat(besModule.mayReadAnalysisAfterCommand()).isFalse();
   }
 
   @Test
@@ -426,6 +428,7 @@ public final class BazelBuildEventServiceModuleTest extends BuildIntegrationTest
         "--bes_timeout=5s");
     afterBuildCommand();
     events.assertNoWarningsOrErrors();
+    assertThat(besModule.mayReadAnalysisAfterCommand()).isFalse();
   }
 
   @Test
@@ -735,6 +738,7 @@ public final class BazelBuildEventServiceModuleTest extends BuildIntegrationTest
     runBuildWithOptions("--bes_backend=inprocess", "--bes_upload_mode=WAIT_FOR_UPLOAD_COMPLETE");
     afterBuildCommand();
     events.assertContainsError("The Build Event Protocol upload failed: DATA_LOSS: Boom1");
+    assertThat(besModule.mayReadAnalysisAfterCommand()).isTrue();
   }
 
   @Test
@@ -771,6 +775,10 @@ public final class BazelBuildEventServiceModuleTest extends BuildIntegrationTest
     runBuildWithOptions("--bes_backend=inprocess", "--bes_upload_mode=FULLY_ASYNC");
     afterBuildCommand();
     events.assertNoWarningsOrErrors();
+    assertThat(besModule.mayReadAnalysisAfterCommand()).isTrue();
+    // A new command clears current transport fields, but cannot prove old readers drained.
+    afterBuildCommand();
+    assertThat(besModule.mayReadAnalysisAfterCommand()).isTrue();
   }
 
   @Test

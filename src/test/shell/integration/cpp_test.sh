@@ -151,4 +151,110 @@ EOF
   expect_not_log "Compiling $pkg/a.cc"
 }
 
+function wait_for_analysis_hibernation_since() {
+  local -r server_log="$1"
+  local -r first_line="$2"
+  local attempt
+  for ((attempt = 0; attempt < 300; attempt++)); do
+    if tail -n +"$first_line" "$server_log" \
+        | grep -F '[Analysis hibernation] stored ' > /dev/null; then
+      return
+    fi
+    sleep 0.1
+  done
+  fail "Analysis did not hibernate within 30 seconds"
+}
+
+function test_discovered_headers_survive_live_graph_hibernation() {
+  add_rules_cc MODULE.bazel
+  local -r pkg=$FUNCNAME
+  mkdir -p "$pkg"
+  cat > "$pkg/BUILD" <<'EOF'
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+cc_binary(name = "a", srcs = ["a.cc"], deps = [":headers"])
+cc_library(name = "headers", srcs = ["used.h"])
+EOF
+  cat > "$pkg/payload.bzl" <<'EOF'
+Payload = provider(fields = ["data", "files"])
+def _impl(target, ctx):
+    return [Payload(
+        data = [str(i) + "x" * 1024 for i in range(128)],
+        files = target[DefaultInfo].files,
+    )]
+payload = aspect(implementation = _impl)
+EOF
+  cat > "$pkg/a.cc" <<EOF
+#include <stdio.h>
+#include "$pkg/used.h"
+int main(void) { puts(VALUE); }
+EOF
+  echo '#define VALUE "before"' > "$pkg/used.h"
+
+  # FileHandler flushes each record, so the wait observes detach completion rather
+  # than a buffered message flushed only when the test daemon exits after 15s.
+  local -r server_log="$TEST_TMPDIR/hibernation-server.log"
+  local -r logging_config="$TEST_TMPDIR/hibernation-logging.properties"
+  local java_server_log="$server_log" java_logging_config="$logging_config"
+  local executable="bazel-bin/$pkg/a"
+  if is_windows; then
+    java_server_log=$(cygpath -m "$server_log")
+    java_logging_config=$(cygpath -m "$logging_config")
+    executable+=".exe"
+  fi
+  cat > "$logging_config" <<EOF
+handlers=java.util.logging.FileHandler
+.level=INFO
+java.util.logging.FileHandler.pattern=$java_server_log
+java.util.logging.FileHandler.formatter=com.google.devtools.build.lib.util.SingleLineFormatter
+EOF
+  local -a startup=(
+    --max_idle_secs=120
+    --host_jvm_args=-Xmx1g
+    --host_jvm_args="-Djava.util.logging.config.file=$java_logging_config"
+  )
+  local server_pid first_line
+  server_pid=$(bazel "${startup[@]}" info server_pid) || fail "could not get server PID"
+  local -a flags=(
+    --aspects="//$pkg:payload.bzl%payload"
+    --spawn_strategy=local --remote_cache= --disk_cache= --nouse_action_cache -s
+  )
+  local -a hibernate=(
+    --experimental_idle_analysis_cache
+    --experimental_idle_analysis_cache_delay=0s
+  )
+  first_line=$(( $(wc -l < "$server_log") + 1 ))
+  bazel "${startup[@]}" build "${flags[@]}" "${hibernate[@]}" "//$pkg:a" >& "$TEST_log" \
+    || fail "initial build failed"
+  expect_log "Compiling $pkg/a.cc"
+  wait_for_analysis_hibernation_since "$server_log" "$first_line"
+  assert_equals before "$("$executable" | tr -d '\r')"
+
+  # Restore before a no-op build: no analysis or compile should be repeated.
+  bazel "${startup[@]}" build "${flags[@]}" --noexperimental_idle_analysis_cache "//$pkg:a" \
+    >& "$TEST_log" || fail "no-op restore build failed"
+  expect_log 'Restoring analysis cache'
+  expect_not_log 'Analysis snapshot could not be restored'
+  expect_log 'INFO: Analyzed target .* (0 packages loaded, 0 targets configured)\.'
+  expect_not_log "Compiling $pkg/a.cc"
+  assert_equals before "$("$executable" | tr -d '\r')"
+
+  first_line=$(( $(wc -l < "$server_log") + 1 ))
+  bazel "${startup[@]}" build "${flags[@]}" "${hibernate[@]}" "//$pkg:a" >& "$TEST_log" \
+    || fail "second hibernation build failed"
+  expect_log 'INFO: Analyzed target .* (0 packages loaded, 0 targets configured)\.'
+  expect_not_log "Compiling $pkg/a.cc"
+  wait_for_analysis_hibernation_since "$server_log" "$first_line"
+
+  echo '#define VALUE "after"' > "$pkg/used.h"
+  bazel "${startup[@]}" build "${flags[@]}" --noexperimental_idle_analysis_cache "//$pkg:a" \
+    >& "$TEST_log" || fail "included-header restore build failed"
+  expect_log 'Restoring analysis cache'
+  expect_not_log 'Analysis snapshot could not be restored'
+  expect_log 'INFO: Analyzed target .* (0 packages loaded, 0 targets configured)\.'
+  expect_log "Compiling $pkg/a.cc"
+  assert_equals after "$("$executable" | tr -d '\r')"
+  assert_equals "$server_pid" "$(bazel "${startup[@]}" info server_pid)"
+}
+
 run_suite "Tests for Bazel's C++ rules"

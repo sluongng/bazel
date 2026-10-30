@@ -19,6 +19,8 @@ import static com.google.devtools.build.lib.bazel.BazelServices.BAZEL_SERVICES;
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static java.util.Arrays.asList;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -154,6 +156,27 @@ public final class BlazeCommandDispatcherTest {
       MemoryProfiler.instance().stop();
     } finally {
       Profiler.setTraceProfilerService(null);
+    }
+  }
+
+  @Test
+  public void interruptedAnalysisRestorePrecedesOptionParsingAndCommandLifecycle()
+      throws Exception {
+    runtime.overrideCommands(ImmutableList.of(foo, bar));
+    var observedRuntime = spy(runtime);
+    doThrow(new InterruptedException("snapshot restore interrupted"))
+        .when(observedRuntime)
+        .prepareAnalysisForCommand("foo", outErr);
+    var dispatcher = new BlazeCommandDispatcher(observedRuntime);
+    try {
+      var result = dispatcher.exec(asList("foo", "--not_a_valid_option"), "test", outErr);
+      assertThat(result.getExitCode()).isEqualTo(ExitCode.INTERRUPTED);
+      assertThat(result.getDetailedExitCode().getFailureDetail().getMessage())
+          .contains("analysis cache restoration interrupted");
+      assertThat(clientEnv).isNull(); // beforeCommand must not have run.
+      assertThat(Thread.currentThread().isInterrupted()).isTrue();
+    } finally {
+      Thread.interrupted();
     }
   }
 

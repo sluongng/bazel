@@ -120,6 +120,8 @@ public abstract class BuildEventServiceModule<OptionsT extends BuildEventService
    */
   @VisibleForTesting static final int RUNS_PER_TEST_LIMIT = 100000;
 
+  private boolean analysisReadersMayRemain;
+
   private BuildEventProtocolOptions bepOptions;
   private AuthAndTLSOptions authTlsOptions;
   private BuildEventStreamOptions besStreamOptions;
@@ -721,6 +723,34 @@ public abstract class BuildEventServiceModule<OptionsT extends BuildEventService
       BugReport.sendNonFatalBugReport(
           new NullPointerException("besStreamOptions null: in a crash?"));
     }
+  }
+
+  @Override
+  public boolean mayReadAnalysisAfterCommand() {
+    if (analysisReadersMayRemain) {
+      return true;
+    }
+    if (streamer == null) {
+      return false;
+    }
+    if (!streamer.isClosed()) {
+      return analysisReadersMayRemain = true;
+    }
+    for (var entry : streamer.getCloseFuturesMap().entrySet()) {
+      var future = entry.getValue();
+      if (entry.getKey().getBesUploadMode() != BesUploadMode.WAIT_FOR_UPLOAD_COMPLETE
+          || !future.isDone()
+          || future.isCancelled()) {
+        return analysisReadersMayRemain = true;
+      }
+      try {
+        Futures.getDone(future);
+      } catch (ExecutionException | CancellationException failure) {
+        // Completion by failure/cancellation is not a reader-drain barrier (notably FileTransport).
+        return analysisReadersMayRemain = true;
+      }
+    }
+    return false;
   }
 
   @Override

@@ -335,6 +335,19 @@ public abstract class BlazeModule implements OptionsSupplier {
   public void afterCommand() throws AbruptExitException {}
 
   /**
+   * Whether command completion may leave readers of analysis providers in background tasks.
+   *
+   * <p>Called after {@link #afterCommand} and before {@link #commandComplete}. Experimental idle
+   * hibernation remains disabled for the daemon after any module reports such readers, including
+   * readers left by failed or cancelled asynchronous work. Modules must also predict readers
+   * launched later by AfterCommandEvent subscribers or commandComplete, not only work already
+   * running when this hook is called.
+   */
+  public boolean mayReadAnalysisAfterCommand() {
+    return false;
+  }
+
+  /**
    * Called after {@link #afterCommand()}. This method can be used to close and cleanup resources
    * specific to the command.
    *

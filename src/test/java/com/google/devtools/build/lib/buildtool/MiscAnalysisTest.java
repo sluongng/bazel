@@ -15,19 +15,34 @@ package com.google.devtools.build.lib.buildtool;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.testing.GcFinalization;
 import com.google.devtools.build.lib.actions.BuildFailedException;
 import com.google.devtools.build.lib.analysis.ConfiguredTarget;
+import com.google.devtools.build.lib.analysis.TransitiveInfoProviderMapImpl;
 import com.google.devtools.build.lib.analysis.ViewCreationFailedException;
+import com.google.devtools.build.lib.analysis.configuredtargets.RuleConfiguredTarget;
 import com.google.devtools.build.lib.analysis.util.AnalysisMock;
 import com.google.devtools.build.lib.buildtool.util.BuildIntegrationTestCase;
 import com.google.devtools.build.lib.events.EventCollector;
 import com.google.devtools.build.lib.events.EventKind;
+import com.google.devtools.build.lib.packages.StarlarkInfo;
+import com.google.devtools.build.lib.runtime.BlazeModule;
+import com.google.devtools.build.lib.runtime.BlazeRuntime;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCacheDeps;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCacheMode;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCachingDependenciesProvider;
 import com.google.devtools.build.lib.testutil.MoreAsserts;
 import com.google.devtools.build.lib.testutil.TestConstants;
+import com.google.devtools.build.lib.util.io.OutErr;
+import java.io.ByteArrayOutputStream;
 import java.lang.ref.WeakReference;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -38,6 +53,312 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class MiscAnalysisTest extends BuildIntegrationTestCase {
+
+  private boolean testModuleHasBackgroundReaders;
+
+  @Override
+  protected BlazeRuntime.Builder getRuntimeBuilder() throws Exception {
+    return super.getRuntimeBuilder()
+        .addBlazeModule(
+            new BlazeModule() {
+              @Override
+              public boolean mayReadAnalysisAfterCommand() {
+                return testModuleHasBackgroundReaders;
+              }
+            });
+  }
+
+  private void writeHibernationFixture(String text) throws Exception {
+    write(
+        "hib/defs.bzl",
+        """
+        Payload = provider(fields = ["text"])
+        Empty = provider(fields = [])
+        Many = provider(fields = ["a", "b", "c", "d", "e", "f"])
+        def _impl(ctx):
+            out = ctx.actions.declare_file(ctx.label.name + ".out")
+            ctx.actions.write(out, ctx.attr.text)
+            return [Payload(text = ctx.attr.text * 2000), Empty(),
+                    Many(a = (ctx.attr.text, "tuple"), b = None, c = None,
+                         d = None, e = None, f = None), DefaultInfo(files = depset([out]))]
+        payload_rule = rule(implementation = _impl, attrs = {"text": attr.string()})
+        """);
+    write(
+        "hib/BUILD",
+        """
+        load(":defs.bzl", "payload_rule")
+        payload_rule(name = "dep", text = "%s")
+        alias(name = "target", actual = ":dep")
+        """
+            .formatted(text));
+    addOptions("--nobuild", "--experimental_idle_analysis_cache");
+  }
+
+  private void hibernateAnalysis() throws Exception {
+    var task = getSkyframeExecutor().createAnalysisHibernationTask(Duration.ZERO, 16 * 1024 * 1024);
+    assertThat(task).isNotNull();
+    task.run();
+    assertThat(getSkyframeExecutor().isAnalysisHibernated()).isTrue();
+  }
+
+  private static TransitiveInfoProviderMapImpl providerMap(ConfiguredTarget target) {
+    return (TransitiveInfoProviderMapImpl) ((RuleConfiguredTarget) target).getProvidersForMetrics();
+  }
+
+  private static StarlarkInfo providerInfo(TransitiveInfoProviderMapImpl map, String name) {
+    for (int i = 0; i < map.getProviderCount(); i++) {
+      if (map.getProviderInstanceAt(i) instanceof StarlarkInfo info
+          && info.getProvider().getPrintableName().equals(name)) {
+        return info;
+      }
+    }
+    throw new AssertionError("provider not found: " + name);
+  }
+
+  private static String payloadText(ConfiguredTarget target) {
+    return (String) providerInfo(providerMap(target), "Payload").getValue("text");
+  }
+
+  @Test
+  public void idleAnalysisSnapshot_restoresUnchangedTargetAndAliasWithoutReanalysis()
+      throws Exception {
+    writeHibernationFixture("first");
+    addOptions("--build");
+    buildTarget("//hib:target");
+    ConfiguredTarget original = getConfiguredTarget("//hib:dep");
+    var map = providerMap(original);
+    var output = getArtifact("//hib:dep", ".out");
+    var action = getGeneratingAction(output);
+    var execution = getActionExecutionValue(output);
+    assertThat(readContentAsLatin1String(output)).isEqualTo("first");
+    hibernateAnalysis();
+    assertThat(map.isHibernated()).isTrue();
+    buildTarget("//hib:target");
+    assertThat(getConfiguredTarget("//hib:dep")).isSameInstanceAs(original);
+    assertThat(providerMap(original)).isSameInstanceAs(map);
+    assertThat(getArtifact("//hib:dep", ".out")).isSameInstanceAs(output);
+    assertThat(getGeneratingAction(output)).isSameInstanceAs(action);
+    assertThat(getActionExecutionValue(output)).isSameInstanceAs(execution);
+    assertThat(readContentAsLatin1String(output)).isEqualTo("first");
+    assertThat(payloadText(original)).isEqualTo("first".repeat(2000));
+    assertThat(providerInfo(map, "Empty").getFieldNames()).isEmpty();
+    var many = providerInfo(map, "Many");
+    assertThat(many.getFieldNames()).hasSize(6);
+    assertThat(many.getValue("a").toString()).contains("first");
+    // A second complete cycle must remain usable.
+    hibernateAnalysis();
+    buildTarget("//hib:target");
+    assertThat(getConfiguredTarget("//hib:dep")).isSameInstanceAs(original);
+    assertThat(getGeneratingAction(output)).isSameInstanceAs(action);
+    assertThat(getActionExecutionValue(output)).isSameInstanceAs(execution);
+  }
+
+  @Test
+  public void idleAnalysisSnapshot_interruptedRuntimeRestoreKeepsGraphForRetry() throws Exception {
+    writeHibernationFixture("first");
+    buildTarget("//hib:target");
+    ConfiguredTarget original = getConfiguredTarget("//hib:dep");
+    var map = providerMap(original);
+    hibernateAnalysis();
+    Thread.currentThread().interrupt();
+    try {
+      assertThrows(
+          InterruptedException.class,
+          () -> getRuntime().prepareAnalysisForCommand("build", /* outErr= */ null));
+      assertThat(Thread.currentThread().isInterrupted()).isTrue();
+      assertThat(getSkyframeExecutor().isAnalysisHibernated()).isTrue();
+      assertThat(map.isHibernated()).isTrue();
+    } finally {
+      Thread.interrupted();
+    }
+    getRuntime().prepareAnalysisForCommand("build", /* outErr= */ null);
+    assertThat(getSkyframeExecutor().isAnalysisHibernated()).isFalse();
+    assertThat(map.isHibernated()).isFalse();
+    assertThat(payloadText(original)).isEqualTo("first".repeat(2000));
+    buildTarget("//hib:target");
+    assertThat(getConfiguredTarget("//hib:dep")).isSameInstanceAs(original);
+  }
+
+  @Test
+  public void idleAnalysisSnapshot_restoresAspectMapSharedWithAlias() throws Exception {
+    writeHibernationFixture("first");
+    write(
+        "hib/extra.bzl",
+        """
+        AspectPayload = provider(fields = ["text"])
+        def _impl(target, ctx):
+            return [AspectPayload(text = str(target.label) * 2000)]
+        extra = aspect(implementation = _impl)
+        """);
+    addOptions("--aspects=//hib:extra.bzl%extra");
+    buildTarget("//hib:dep", "//hib:target");
+    var aspects = ImmutableList.copyOf(getBuildResultListener().getAnalyzedAspects().values());
+    assertThat(aspects).hasSize(2);
+    var map = (TransitiveInfoProviderMapImpl) aspects.get(0).getProviders();
+    assertThat(aspects.get(1).getProviders()).isSameInstanceAs(map);
+    StarlarkInfo original = providerInfo(map, "AspectPayload");
+    Object text = original.getValue("text");
+    hibernateAnalysis();
+    assertThat(map.isHibernated()).isTrue();
+    buildTarget("//hib:dep", "//hib:target");
+    var restoredAspects = getBuildResultListener().getAnalyzedAspects().values();
+    assertThat(restoredAspects).hasSize(2);
+    for (var aspect : restoredAspects) {
+      assertThat(aspect.getProviders()).isSameInstanceAs(map);
+    }
+    StarlarkInfo restored = providerInfo(map, "AspectPayload");
+    assertThat(restored).isNotSameInstanceAs(original);
+    assertThat(restored.getProvider()).isSameInstanceAs(original.getProvider());
+    assertThat(restored.getValue("text")).isEqualTo(text);
+  }
+
+  @Test
+  public void idleAnalysisSnapshot_runtimeSchedulesConfiguredTaskAndHonorsSizeAndDisableGates()
+      throws Exception {
+    writeHibernationFixture("x".repeat(600));
+    write(
+        "hib/defs.bzl",
+        """
+        Payload = provider(fields = ["text"])
+        def _impl(ctx):
+            return [Payload(text = [ctx.attr.text + str(i) for i in range(1000)])]
+        payload_rule = rule(implementation = _impl, attrs = {"text": attr.string()})
+        """);
+    addOptions(
+        "--experimental_idle_analysis_cache_delay=2s",
+        "--experimental_idle_analysis_cache_max_size_mb=1");
+    buildTarget("//hib:target");
+    var scheduled =
+        getRuntimeWrapper().getLastCommandResult().getIdleTasks().stream()
+            .filter(task -> task.displayName().equals("Analysis provider hibernation"))
+            .findFirst()
+            .orElseThrow();
+    assertThat(scheduled.delay()).isEqualTo(Duration.ofSeconds(2));
+    scheduled.run(); // About 600 KiB fits a correctly converted 1 MiB cap, not a 1-byte cap.
+    assertThat(getSkyframeExecutor().isAnalysisHibernated()).isTrue();
+    write(
+        "hib/BUILD",
+        """
+        load(":defs.bzl", "payload_rule")
+        payload_rule(name = "dep", text = "%s")
+        alias(name = "target", actual = ":dep")
+        """
+            .formatted("x".repeat(2000)));
+    buildTarget("//hib:target");
+    var tooLarge =
+        getRuntimeWrapper().getLastCommandResult().getIdleTasks().stream()
+            .filter(task -> task.displayName().equals("Analysis provider hibernation"))
+            .findFirst()
+            .orElseThrow();
+    assertThrows(com.google.devtools.build.lib.server.IdleTaskException.class, tooLarge::run);
+    assertThat(getSkyframeExecutor().isAnalysisHibernated()).isFalse();
+    addOptions("--noexperimental_idle_analysis_cache");
+    buildTarget("//hib:target");
+    assertThat(
+            getRuntimeWrapper().getLastCommandResult().getIdleTasks().stream()
+                .anyMatch(task -> task.displayName().equals("Analysis provider hibernation")))
+        .isFalse();
+    addOptions("--experimental_idle_analysis_cache", "--nokeep_state_after_build");
+    buildTarget("//hib:target");
+    assertThat(
+            getRuntimeWrapper().getLastCommandResult().getIdleTasks().stream()
+                .anyMatch(task -> task.displayName().equals("Analysis provider hibernation")))
+        .isFalse();
+  }
+
+  @Test
+  public void idleAnalysisSnapshot_normalInvalidationSeesBuildAndBzlEdits() throws Exception {
+    writeHibernationFixture("first");
+    buildTarget("//hib:target");
+    hibernateAnalysis();
+    write(
+        "hib/BUILD",
+        """
+        load(":defs.bzl", "payload_rule")
+        payload_rule(name = "dep", text = "changed")
+        alias(name = "target", actual = ":dep")
+        """);
+    buildTarget("//hib:target");
+    assertThat(payloadText(getConfiguredTarget("//hib:dep"))).isEqualTo("changed".repeat(2000));
+    hibernateAnalysis();
+    write(
+        "hib/defs.bzl",
+        """
+        Payload = provider(fields = ["text"])
+        def _impl(ctx):
+            return [Payload(text = ctx.attr.text + "-bzl")]
+        payload_rule = rule(implementation = _impl, attrs = {"text": attr.string()})
+        """);
+    buildTarget("//hib:target");
+    assertThat(payloadText(getConfiguredTarget("//hib:dep"))).isEqualTo("changed-bzl");
+  }
+
+  @Test
+  public void idleAnalysisSnapshot_corruptionColdResetsBeforeNextCommand() throws Exception {
+    writeHibernationFixture("first");
+    buildTarget("//hib:target");
+    ConfiguredTarget original = getConfiguredTarget("//hib:dep");
+    hibernateAnalysis();
+    try (var files =
+        Files.walk(Path.of(outputBase.getPathString(), "server", "provider-hibernation"))) {
+      Path file =
+          files.filter(path -> path.toString().endsWith(".committed")).findFirst().orElseThrow();
+      Files.write(file, new byte[] {1});
+    }
+    var stderr = new ByteArrayOutputStream();
+    getRuntime()
+        .prepareAnalysisForCommand("build", OutErr.create(new ByteArrayOutputStream(), stderr));
+    assertThat(stderr.toString(java.nio.charset.StandardCharsets.UTF_8))
+        .contains("discarded the in-memory build graph and will recompute it");
+    buildTarget("//hib:target");
+    assertThat(getConfiguredTarget("//hib:dep")).isNotSameInstanceAs(original);
+    assertThat(payloadText(getConfiguredTarget("//hib:dep"))).isEqualTo("first".repeat(2000));
+    assertThat(providerMap(original).toString()).contains("abandoned");
+  }
+
+  @Test
+  public void idleAnalysisSnapshot_backgroundReaderExclusionSurvivesReset() throws Exception {
+    writeHibernationFixture("first");
+    buildTarget("//hib:target");
+    getSkyframeExecutor().disableAnalysisHibernationForBackgroundReaders();
+    assertThat(getSkyframeExecutor().createAnalysisHibernationTask(Duration.ZERO, 1024 * 1024))
+        .isNull();
+    getSkyframeExecutor().resetEvaluator();
+    buildTarget("//hib:target");
+    assertThat(getSkyframeExecutor().createAnalysisHibernationTask(Duration.ZERO, 1024 * 1024))
+        .isNull();
+  }
+
+  @Test
+  public void idleAnalysisSnapshot_moduleReaderHookDisablesScheduling() throws Exception {
+    writeHibernationFixture("first");
+    testModuleHasBackgroundReaders = true;
+    buildTarget("//hib:target");
+    assertThat(getSkyframeExecutor().createAnalysisHibernationTask(Duration.ZERO, 1024 * 1024))
+        .isNull();
+    testModuleHasBackgroundReaders = false;
+    buildTarget("//hib:target");
+    assertThat(getSkyframeExecutor().createAnalysisHibernationTask(Duration.ZERO, 1024 * 1024))
+        .isNull();
+  }
+
+  @Test
+  public void idleAnalysisSnapshot_uploadOnlySkycacheExclusionIsSticky() throws Exception {
+    writeHibernationFixture("first");
+    buildTarget("//hib:target");
+    var executor = getSkyframeExecutor();
+    var original = executor.getRemoteAnalysisCachingDependenciesProvider();
+    var provider = mock(RemoteAnalysisCachingDependenciesProvider.class);
+    when(provider.mode()).thenReturn(RemoteAnalysisCacheMode.UPLOAD);
+    executor.setRemoteAnalysisCachingDependenciesProvider(
+        provider, RemoteAnalysisCacheDeps.createDisabled());
+    assertThat(executor.createAnalysisHibernationTask(Duration.ZERO, 1024 * 1024)).isNull();
+    executor.setRemoteAnalysisCachingDependenciesProvider(
+        original, RemoteAnalysisCacheDeps.createDisabled());
+    executor.resetEvaluator();
+    buildTarget("//hib:target");
+    assertThat(executor.createAnalysisHibernationTask(Duration.ZERO, 1024 * 1024)).isNull();
+  }
 
   @Test
   public void testWarningsNotReplayed() throws Exception {

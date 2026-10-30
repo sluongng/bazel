@@ -184,6 +184,7 @@ import com.google.devtools.build.lib.server.FailureDetails.BuildConfiguration.Co
 import com.google.devtools.build.lib.server.FailureDetails.ExternalRepository;
 import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
 import com.google.devtools.build.lib.server.FailureDetails.TargetPatterns;
+import com.google.devtools.build.lib.server.IdleTask;
 import com.google.devtools.build.lib.skyframe.ActionTemplateExpansionValue.ActionTemplateExpansionKey;
 import com.google.devtools.build.lib.skyframe.AspectKeyCreator.AspectKey;
 import com.google.devtools.build.lib.skyframe.AspectKeyCreator.TopLevelAspectsKey;
@@ -223,8 +224,10 @@ import com.google.devtools.build.lib.skyframe.rewinding.ActionRewindStrategy;
 import com.google.devtools.build.lib.skyframe.serialization.DeserializedSkyValue;
 import com.google.devtools.build.lib.skyframe.serialization.FrontierNodeVersion;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.ClientId;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.ProviderSnapshot;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCacheDeps;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCacheManager;
+import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCacheMode;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCacheReaderDepsProvider;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCachingDependenciesProvider;
 import com.google.devtools.build.lib.skyframe.serialization.analysis.RemoteAnalysisCachingServerState;
@@ -411,6 +414,11 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
   SkyframeProgressReceiver progressReceiver;
   private CyclesReporter cyclesReporter = null;
 
+  private final AnalysisHibernation analysisHibernation = new AnalysisHibernation();
+  // Sticky across evaluator resets: a failed/cancelled background transport may still hold readers.
+  private boolean analysisHibernationHasBackgroundReaders;
+  private boolean analysisHibernationHasUsedRemoteAnalysis;
+
   private boolean lastAnalysisDiscarded = false;
 
   /**
@@ -570,6 +578,8 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
   public void setRemoteAnalysisCachingDependenciesProvider(
       RemoteAnalysisCachingDependenciesProvider remoteAnalysisCachingDependenciesProvider,
       RemoteAnalysisCacheReaderDepsProvider remoteAnalysisCacheReaderDepsProvider) {
+    analysisHibernationHasUsedRemoteAnalysis |=
+        remoteAnalysisCachingDependenciesProvider.mode() != RemoteAnalysisCacheMode.OFF;
     this.remoteAnalysisCachingDependenciesProvider = remoteAnalysisCachingDependenciesProvider;
     this.remoteAnalysisCacheReaderDepsProvider = remoteAnalysisCacheReaderDepsProvider;
   }
@@ -1225,8 +1235,73 @@ public abstract class SkyframeExecutor implements WalkableGraphFactory {
     return new SkyframeProgressReceiver();
   }
 
+  /** Excludes this daemon after a module reports possibly unquiesced analysis readers. */
+  public void disableAnalysisHibernationForBackgroundReaders() {
+    analysisHibernationHasBackgroundReaders = true;
+  }
+
+  @Nullable
+  public String takeAnalysisHibernationWarning() {
+    return analysisHibernation.takeWarning();
+  }
+
+  public boolean isAnalysisHibernated() {
+    return analysisHibernation.isHibernated();
+  }
+
+  /**
+   * Restores under command exclusion before parsing options or constructing the environment.
+   * Returns a diagnostic if the snapshot was discarded and analysis must be recomputed.
+   */
+  @Nullable
+  public String restoreHibernatedAnalysis() throws InterruptedException {
+    boolean restored;
+    try {
+      restored = analysisHibernation.restore();
+    } catch (IOException
+        | com.google.devtools.build.lib.skyframe.serialization.SerializationException
+        | RuntimeException failure) {
+      logger.atWarning().withCause(failure).log(
+          "Analysis snapshot unavailable; resetting evaluator before command");
+      resetEvaluator();
+      return "Analysis snapshot could not be restored ("
+          + failure.getClass().getSimpleName()
+          + ": "
+          + failure.getMessage()
+          + "); discarded the in-memory build graph and will recompute it.";
+    }
+    if (!restored && analysisHibernation.isHibernated()) {
+      // A future lifecycle bug must not continue a command with detached maps. In particular,
+      // do not reset concurrently with an operation that violated command exclusion.
+      throw new IllegalStateException("analysis restore was not admitted under command exclusion");
+    }
+    return null;
+  }
+
+  @Nullable
+  public IdleTask createAnalysisHibernationTask(java.time.Duration delay, long maximumBytes) {
+    if (lastAnalysisDiscarded
+        || analysisCacheCleared
+        || !tracksStateForIncrementality()
+        || analysisHibernationHasUsedRemoteAnalysis
+        || analysisHibernationHasBackgroundReaders) {
+      return null;
+    }
+    var limits = new ProviderSnapshot.Limits(maximumBytes, 250_000, 60);
+    return analysisHibernation.idleTask(
+        memoizingEvaluator.getInMemoryGraph(),
+        java.nio.file.Path.of(directories.getOutputBase().getPathString()),
+        delay,
+        limits);
+  }
+
+  public void closeAnalysisHibernation() {
+    analysisHibernation.close();
+  }
+
   /** Reinitializes the Skyframe evaluator, dropping all previously computed values. */
   public void resetEvaluator() {
+    analysisHibernation.discard();
     analysisCount.set(0);
     emittedEventState.clear();
     skyframeBuildView.reset();
