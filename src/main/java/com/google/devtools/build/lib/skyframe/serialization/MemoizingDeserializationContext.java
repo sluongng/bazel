@@ -26,6 +26,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.CodedInputStream;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
@@ -72,6 +73,16 @@ abstract class MemoizingDeserializationContext extends DeserializationContext {
       throws SerializationException {
     return ObjectCodecs.deserializeStreamFully(
         CodedInputStream.newInstance(bytes),
+        new MemoizingDeserializationContextImpl(codecRegistry, dependencies));
+  }
+
+  static Object deserializeMemoized(
+      ObjectCodecRegistry codecRegistry,
+      ImmutableClassToInstanceMap<Object> dependencies,
+      InputStream input)
+      throws SerializationException {
+    return ObjectCodecs.deserializeStreamFully(
+        CodedInputStream.newInstance(input),
         new MemoizingDeserializationContextImpl(codecRegistry, dependencies));
   }
 

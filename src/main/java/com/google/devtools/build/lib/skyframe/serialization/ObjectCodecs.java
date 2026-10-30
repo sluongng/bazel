@@ -23,6 +23,8 @@ import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.CodedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.List;
 import java.util.function.BiConsumer;
 import javax.annotation.Nullable;
@@ -155,6 +157,23 @@ public class ObjectCodecs {
   }
 
   /**
+   * Serializes with fresh memoization state directly to {@code output}.
+   *
+   * <p>Flushes the serialization buffer but does not close the caller-owned stream. Unlike the
+   * byte-array overload, this does not retain the complete serialized representation in memory.
+   */
+  public void serializeMemoized(@Nullable Object subject, OutputStream output)
+      throws SerializationException {
+    MemoizingSerializationContext.serializeToStream(
+        getCodecRegistry(),
+        getDependencies(),
+        subject,
+        output,
+        CodedOutputStream.DEFAULT_BUFFER_SIZE,
+        /* profileCollector= */ null);
+  }
+
+  /**
    * Serializes {@code subject} using memoization, with {@code byte[]} output.
    *
    * @param outputCapacity the initial capacity of the {@link ByteArrayOutputStream}
@@ -242,6 +261,17 @@ public class ObjectCodecs {
   public Object deserializeMemoized(byte[] data) throws SerializationException {
     return MemoizingDeserializationContext.deserializeMemoized(
         getCodecRegistry(), getDependencies(), data);
+  }
+
+  /**
+   * Deserializes one complete memoized representation without closing {@code input}.
+   *
+   * <p>Uses fresh memoization state and rejects trailing data. Callers that read untrusted or
+   * compressed input must bound and validate it before deserialization.
+   */
+  public Object deserializeMemoized(InputStream input) throws SerializationException {
+    return MemoizingDeserializationContext.deserializeMemoized(
+        getCodecRegistry(), getDependencies(), input);
   }
 
   public Object deserializeMemoizedAndBlocking(
