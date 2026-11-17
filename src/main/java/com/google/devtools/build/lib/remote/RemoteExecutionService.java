@@ -77,6 +77,7 @@ import com.google.devtools.build.lib.actions.ParamFileActionInput;
 import com.google.devtools.build.lib.actions.Spawn;
 import com.google.devtools.build.lib.actions.SpawnResult;
 import com.google.devtools.build.lib.actions.Spawns;
+import com.google.devtools.build.lib.actions.UserExecException;
 import com.google.devtools.build.lib.actions.VirtualActionInput;
 import com.google.devtools.build.lib.analysis.platform.PlatformInfo;
 import com.google.devtools.build.lib.analysis.platform.PlatformUtils;
@@ -116,6 +117,8 @@ import com.google.devtools.build.lib.remote.util.DigestUtil;
 import com.google.devtools.build.lib.remote.util.TracingMetadataUtils;
 import com.google.devtools.build.lib.remote.util.Utils;
 import com.google.devtools.build.lib.remote.util.Utils.InMemoryOutput;
+import com.google.devtools.build.lib.server.FailureDetails;
+import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
 import com.google.devtools.build.lib.server.FailureDetails.RemoteExecution;
 import com.google.devtools.build.lib.util.Fingerprint;
 import com.google.devtools.build.lib.util.OS;
@@ -1890,6 +1893,30 @@ public class RemoteExecutionService {
     checkState(
         SpawnResult.Status.SUCCESS.equals(spawnResult.status()) && spawnResult.exitCode() == 0,
         "shouldn't upload outputs of failed local action");
+
+    // This also covers local fallback execution, which uploads before returning to the spawn
+    // strategy. Check synchronously so an async upload cannot hide the failure.
+    long outputLimit = executionOptions.getMaxActionStdoutStderrBytes();
+    if (outputLimit != 0) {
+      try {
+        FileOutErr outErr = action.getSpawnExecutionContext().getFileOutErr();
+        executionOptions.checkActionOutputSizes(
+            action.getSpawn().getStdout() == null ? outErr.outSize() : 0, outErr.errSize());
+      } catch (UserExecException e) {
+        onUploadComplete.run();
+        throw e;
+      } catch (IOException e) {
+        onUploadComplete.run();
+        throw new EnvironmentalExecException(
+            e,
+            FailureDetail.newBuilder()
+                .setMessage("Failed to read action output sizes")
+                .setSpawn(
+                    FailureDetails.Spawn.newBuilder()
+                        .setCode(FailureDetails.Spawn.Code.EXEC_IO_EXCEPTION))
+                .build());
+      }
+    }
 
     try (SilentCloseable c = Profiler.instance().profile("checkForConcurrentModifications")) {
       checkForConcurrentModifications(action, concurrentChangesCheckLevel);

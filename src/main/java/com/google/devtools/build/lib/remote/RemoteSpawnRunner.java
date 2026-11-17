@@ -40,6 +40,7 @@ import com.google.devtools.build.lib.actions.Spawn;
 import com.google.devtools.build.lib.actions.SpawnMetrics;
 import com.google.devtools.build.lib.actions.SpawnResult;
 import com.google.devtools.build.lib.actions.SpawnResult.Status;
+import com.google.devtools.build.lib.actions.UserExecException;
 import com.google.devtools.build.lib.authandtls.credentialhelper.CredentialHelperException;
 import com.google.devtools.build.lib.clock.BlazeClock;
 import com.google.devtools.build.lib.clock.BlazeClock.MillisSinceEpochToNanosConverter;
@@ -621,6 +622,7 @@ public class RemoteSpawnRunner implements SpawnRunner {
             new SpawnResult.Builder()
                 .setRunnerName(getName())
                 .setStatus(Status.TIMEOUT)
+                .setRemote(true)
                 .setExitCode(SpawnResult.POSIX_TIMEOUT_EXIT_CODE)
                 .setFailureDetail(
                     FailureDetail.newBuilder()
@@ -705,8 +707,17 @@ public class RemoteSpawnRunner implements SpawnRunner {
         && uploadLocalResults
         && Objects.equals(result.status(), Status.SUCCESS)
         && result.exitCode() == 0) {
-      remoteExecutionService.uploadOutputs(
-          action, result, () -> {}, remoteOptions.getGuardAgainstConcurrentChanges());
+      try {
+        remoteExecutionService.uploadOutputs(
+            action, result, () -> {}, remoteOptions.getGuardAgainstConcurrentChanges());
+      } catch (UserExecException e) {
+        // Keep the actual local runner and its metrics in the execution log.
+        FailureDetail detail = e.getFailureDetail();
+        if (detail.getSpawn().getCode() != FailureDetails.Spawn.Code.OUTPUT_TOO_LARGE) {
+          throw e;
+        }
+        return result.withOversizedOutput(detail);
+      }
     }
     return result;
   }

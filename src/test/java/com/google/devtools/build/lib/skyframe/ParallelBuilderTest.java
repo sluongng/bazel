@@ -16,6 +16,7 @@ package com.google.devtools.build.lib.skyframe;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
@@ -31,6 +32,7 @@ import com.google.devtools.build.lib.actions.ActionExecutionException;
 import com.google.devtools.build.lib.actions.ActionResult;
 import com.google.devtools.build.lib.actions.Artifact;
 import com.google.devtools.build.lib.actions.BuildFailedException;
+import com.google.devtools.build.lib.actions.SpawnResult;
 import com.google.devtools.build.lib.actions.cache.ActionCache;
 import com.google.devtools.build.lib.actions.util.TestAction;
 import com.google.devtools.build.lib.collect.nestedset.NestedSet;
@@ -40,12 +42,16 @@ import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.EventHandler;
 import com.google.devtools.build.lib.events.EventKind;
 import com.google.devtools.build.lib.events.PrintingEventHandler;
+import com.google.devtools.build.lib.events.StoredEventHandler;
+import com.google.devtools.build.lib.exec.SpawnExecException;
+import com.google.devtools.build.lib.server.FailureDetails;
 import com.google.devtools.build.lib.server.FailureDetails.Crash;
 import com.google.devtools.build.lib.server.FailureDetails.Crash.Code;
 import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
 import com.google.devtools.build.lib.testutil.BlazeTestUtils;
 import com.google.devtools.build.lib.testutil.TestUtils;
 import com.google.devtools.build.lib.util.DetailedExitCode;
+import com.google.devtools.build.lib.util.io.FileOutErr;
 import com.google.devtools.build.lib.vfs.DigestHashFunction;
 import com.google.devtools.build.lib.vfs.FileStatus;
 import com.google.devtools.build.lib.vfs.FileSystem;
@@ -65,6 +71,7 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -201,6 +208,100 @@ public class ParallelBuilderTest extends TimestampBuilderTestCase {
     buildArtifacts(createBuilder(DEFAULT_NUM_JOBS, true), pear);
     assertThat(recorder.actionExecutedEvents).hasSize(1);
     assertThat(recorder.actionExecutedEvents.get(0).getAction()).isEqualTo(action);
+  }
+
+  @Test
+  public void testOversizedStdoutIsNotReferencedByActionEvent() throws Exception {
+    checkActionEventOutputReferences("12345", "1234", /* remote= */ false, false, true);
+  }
+
+  @Test
+  public void testOversizedStderrIsNotReferencedByActionEvent() throws Exception {
+    checkActionEventOutputReferences("1234", "12345", /* remote= */ false, true, false);
+  }
+
+  @Test
+  public void testRemoteOutputAboveLocalCapIsReferencedByActionEvent() throws Exception {
+    checkActionEventOutputReferences("12345", "12345", /* remote= */ true, true, true);
+  }
+
+  private void checkActionEventOutputReferences(
+      String stdout,
+      String stderr,
+      boolean remote,
+      boolean referencesStdout,
+      boolean referencesStderr)
+      throws Exception {
+    // Model a rejected local spawn and a remote spawn that failed for an unrelated reason.
+    options.parse("--max_action_stdout_stderr_bytes=4");
+    FailureDetails.Spawn.Code code =
+        remote
+            ? FailureDetails.Spawn.Code.NON_ZERO_EXIT
+            : FailureDetails.Spawn.Code.OUTPUT_TOO_LARGE;
+    SpawnResult failedSpawn =
+        new SpawnResult.Builder()
+            .setRunnerName(remote ? "remote" : "local")
+            .setRemote(remote)
+            .setStatus(
+                remote ? SpawnResult.Status.NON_ZERO_EXIT : SpawnResult.Status.OUTPUT_TOO_LARGE)
+            .setExitCode(1)
+            .setFailureDetail(
+                FailureDetail.newBuilder()
+                    .setSpawn(FailureDetails.Spawn.newBuilder().setCode(code))
+                    .build())
+            .build();
+    Artifact output = createDerivedArtifact("output");
+    ActionEventRecorder recorder = new ActionEventRecorder();
+    eventBus.register(recorder);
+    AtomicReference<FileOutErr> recordedOutput = new AtomicReference<>();
+    registerAction(
+        new TestAction(() -> {}, emptyNestedSet, ImmutableSet.of(output)) {
+          @Override
+          public ActionResult execute(ActionExecutionContext context)
+              throws ActionExecutionException, InterruptedException {
+            FileOutErr outErr = context.getFileOutErr();
+            recordedOutput.set(outErr);
+            outErr.printOut(stdout);
+            outErr.printErr(stderr);
+            throw new SpawnExecException("action failed", failedSpawn, false)
+                .toActionExecutionException(this);
+          }
+        });
+    reporter.removeHandler(failFastHandler);
+    StoredEventHandler reportedEvents = new StoredEventHandler();
+    reporter.addHandler(reportedEvents);
+
+    // Build the artifact to trigger reporting of the failed action.
+    assertThrows(BuildFailedException.class, () -> buildArtifacts(output));
+
+    // Publish references only for allowed streams, without truncating either local log.
+    assertThat(recorder.actionExecutedEvents).hasSize(1);
+    ActionExecutedEvent event = recorder.actionExecutedEvents.get(0);
+    FileOutErr outErr = recordedOutput.get();
+    assertThat(event.getStdout())
+        .isEqualTo(referencesStdout ? outErr.getOutputPath().toString() : null);
+    assertThat(event.getStderr())
+        .isEqualTo(referencesStderr ? outErr.getErrorPath().toString() : null);
+    assertThat(event.referencedLocalFiles())
+        .hasSize((referencesStdout ? 1 : 0) + (referencesStderr ? 1 : 0));
+    // The UI prints these event bytes, which BES also receives as progress output.
+    List<Event.ProcessOutput> processOutputs =
+        reportedEvents.getEvents().stream()
+            .filter(e -> e.getProcessOutput() != null)
+            .map(Event::getProcessOutput)
+            .toList();
+    assertThat(processOutputs).hasSize(1);
+    Event.ProcessOutput processOutput = processOutputs.get(0);
+    assertThat(processOutput.getStdOutSize()).isEqualTo(referencesStdout ? stdout.length() : 0);
+    assertThat(processOutput.getStdErrSize()).isEqualTo(referencesStderr ? stderr.length() : 0);
+    assertThat(new String(processOutput.getStdOut(), ISO_8859_1))
+        .isEqualTo(referencesStdout ? stdout : "");
+    assertThat(new String(processOutput.getStdErr(), ISO_8859_1))
+        .isEqualTo(referencesStderr ? stderr : "");
+
+    // The originals are still available on disk.
+    assertThat(outErr.outAsLatin1()).isEqualTo(stdout);
+    assertThat(outErr.errAsLatin1()).isEqualTo(stderr);
   }
 
   @Test

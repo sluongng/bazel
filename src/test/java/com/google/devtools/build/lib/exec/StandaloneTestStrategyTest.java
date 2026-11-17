@@ -17,6 +17,7 @@ package com.google.devtools.build.lib.exec;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.truth.Truth.assertThat;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.times;
@@ -34,6 +35,7 @@ import com.google.devtools.build.lib.actions.ActionExecutionException;
 import com.google.devtools.build.lib.actions.ActionInputPrefetcher;
 import com.google.devtools.build.lib.actions.ActionKeyContext;
 import com.google.devtools.build.lib.actions.Artifact;
+import com.google.devtools.build.lib.actions.Artifact.TreeArtifact;
 import com.google.devtools.build.lib.actions.DiscoveredModulesPruner;
 import com.google.devtools.build.lib.actions.InputMetadataProvider;
 import com.google.devtools.build.lib.actions.OutputMetadataStore;
@@ -70,6 +72,7 @@ import com.google.devtools.build.lib.runtime.TestSummaryOptions;
 import com.google.devtools.build.lib.server.FailureDetails;
 import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
 import com.google.devtools.build.lib.server.FailureDetails.Spawn.Code;
+import com.google.devtools.build.lib.skyframe.TreeArtifactValue;
 import com.google.devtools.build.lib.util.AbruptExitException;
 import com.google.devtools.build.lib.util.io.FileOutErr;
 import com.google.devtools.build.lib.vfs.FileSystem;
@@ -429,6 +432,83 @@ public final class StandaloneTestStrategyTest extends BuildViewTestCase {
     assertThat(okAttempt.getExecutionInfo().getExitCode()).isEqualTo(0);
     assertThat(okAttempt.getExecutionInfo().getStrategy()).isEqualTo("test");
     assertThat(okAttempt.getExecutionInfo().getHostname()).isEqualTo("");
+  }
+
+  private enum RejectedSpawn {
+    TEST,
+    COVERAGE
+  }
+
+  @Test
+  public void outputLimitRejection_isNotProcessedAsTestFailure(
+      @TestParameter RejectedSpawn rejectedSpawn) throws Exception {
+    // Use a flaky test so an ordinary failure would be eligible for a retry.
+    if (rejectedSpawn == RejectedSpawn.COVERAGE) {
+      useConfiguration(
+          "--collect_code_coverage",
+          "--experimental_split_coverage_postprocessing",
+          "--experimental_fetch_all_coverage_outputs");
+    }
+    scratch.file("standalone/flaky_test.sh", "mocked");
+    scratch.file(
+        "standalone/BUILD",
+        """
+        load('//test_defs:foo_test.bzl', 'foo_test')
+        foo_test(
+            name = "flaky_test",
+            srcs = ["flaky_test.sh"],
+            flaky = True,
+        )
+        """);
+    TestRunnerAction action = getTestAction("//standalone:flaky_test");
+    ActionExecutionContext context =
+        new FakeActionExecutionContext(
+            createTempOutErr(outputBase), inputMetadataFor(action), spawnStrategy);
+    if (rejectedSpawn == RejectedSpawn.COVERAGE) {
+      when(context
+              .getOutputMetadataStore()
+              .getTreeArtifactValue((TreeArtifact) action.getCoverageDirectoryTreeArtifact()))
+          .thenReturn(TreeArtifactValue.empty());
+    }
+
+    // Reject either the test itself or the coverage spawn after a passing test.
+    SpawnExecException rejection =
+        new SpawnExecException(
+            "output limit exceeded",
+            new SpawnResult.Builder()
+                .setStatus(Status.OUTPUT_TOO_LARGE)
+                .setExitCode(1)
+                .setFailureDetail(
+                    FailureDetail.newBuilder()
+                        .setSpawn(FailureDetails.Spawn.newBuilder().setCode(Code.OUTPUT_TOO_LARGE))
+                        .build())
+                .setRunnerName("test")
+                .build(),
+            false);
+    if (rejectedSpawn == RejectedSpawn.COVERAGE) {
+      when(spawnStrategy.exec(any(), any()))
+          .thenReturn(ImmutableList.of(PASSED_TEST_SPAWN))
+          .thenThrow(rejection);
+    } else {
+      when(spawnStrategy.exec(any(), any())).thenThrow(rejection);
+    }
+    TestedStandaloneTestStrategy strategy =
+        new TestedStandaloneTestStrategy(
+            Options.getDefaults(ExecutionOptions.class), TestSummaryOptions.DEFAULTS, outputBase);
+
+    // Run the test action through the standalone strategy.
+    ActionExecutionException failure =
+        assertThrows(ActionExecutionException.class, () -> execute(action, context, strategy));
+
+    // Propagate the action failure without publishing an ordinary test result.
+    assertThat(failure).hasCauseThat().isSameInstanceAs(rejection);
+    assertThat(failure.getDetailedExitCode().getFailureDetail().getSpawn().getCode())
+        .isEqualTo(Code.OUTPUT_TOO_LARGE);
+    assertThat(storedEvents.getPosts().stream().filter(TestAttempt.class::isInstance).toList())
+        .isEmpty();
+    assertThat(strategy.postedResult).isNull();
+    // No retry or XML generation, including after a successful test but rejected coverage spawn.
+    verify(spawnStrategy, times(rejectedSpawn == RejectedSpawn.TEST ? 1 : 2)).exec(any(), any());
   }
 
   @Test

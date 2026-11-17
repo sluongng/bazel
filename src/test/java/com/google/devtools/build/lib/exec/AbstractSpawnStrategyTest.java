@@ -18,8 +18,10 @@ import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -41,12 +43,16 @@ import com.google.devtools.build.lib.server.FailureDetails;
 import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
 import com.google.devtools.build.lib.server.FailureDetails.Spawn.Code;
 import com.google.devtools.build.lib.testutil.ManualClock;
+import com.google.devtools.build.lib.util.io.FileOutErr;
 import com.google.devtools.build.lib.vfs.DigestHashFunction;
 import com.google.devtools.build.lib.vfs.FileSystem;
+import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.build.lib.vfs.inmemoryfs.InMemoryFileSystem;
 import com.google.devtools.common.options.Options;
+import com.google.testing.junit.testparameterinjector.TestParameter;
+import com.google.testing.junit.testparameterinjector.TestParameterInjector;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -55,13 +61,12 @@ import java.util.function.Supplier;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /** Tests for {@link BlazeExecutor}. */
-@RunWith(JUnit4.class)
+@RunWith(TestParameterInjector.class)
 public class AbstractSpawnStrategyTest {
   private static final FailureDetail NON_ZERO_EXIT_DETAILS =
       FailureDetail.newBuilder()
@@ -72,6 +77,10 @@ public class AbstractSpawnStrategyTest {
     TestedSpawnStrategy(SpawnRunner spawnRunner) {
       super(spawnRunner, Options.getDefaults(ExecutionOptions.class));
     }
+
+    TestedSpawnStrategy(SpawnRunner spawnRunner, ExecutionOptions executionOptions) {
+      super(spawnRunner, executionOptions);
+    }
   }
 
   private static final Spawn SIMPLE_SPAWN =
@@ -79,6 +88,8 @@ public class AbstractSpawnStrategyTest {
 
   private final FileSystem fs = new InMemoryFileSystem(DigestHashFunction.SHA256);
   private final Path execRoot = fs.getPath("/execroot");
+  private final FileOutErr outErr =
+      new FileOutErr(execRoot.getChild("stdout"), execRoot.getChild("stderr"));
   @Mock private SpawnRunner spawnRunner;
   @Mock private ActionExecutionContext actionExecutionContext;
   private StoredEventHandler eventHandler;
@@ -86,10 +97,130 @@ public class AbstractSpawnStrategyTest {
 
   @Before
   public final void setUp() throws Exception {
+    execRoot.createDirectoryAndParents();
     MockitoAnnotations.initMocks(this);
     eventHandler = new StoredEventHandler();
     when(actionExecutionContext.getEventHandler()).thenReturn(eventHandler);
     when(actionExecutionContext.getClock()).thenReturn(clock);
+    when(actionExecutionContext.getFileOutErr()).thenReturn(outErr);
+  }
+
+  @Test
+  public void oversizedOutputFailsBeforeCacheStore(@TestParameter boolean stderr) throws Exception {
+    // Set up a successful subprocess that writes directly to a captured stream.
+    FileSystemUtils.writeContentAsLatin1(
+        stderr ? outErr.getErrorPath() : outErr.getOutputPath(), "12345");
+    SpawnResult result =
+        new SpawnResult.Builder().setStatus(Status.SUCCESS).setRunnerName("test").build();
+    when(spawnRunner.exec(any(), any())).thenReturn(result);
+    SpawnCache cache = mock(SpawnCache.class);
+    CacheHandle entry = mock(CacheHandle.class);
+    when(cache.lookup(any(), any())).thenReturn(entry);
+    when(entry.willStore()).thenReturn(true);
+    when(actionExecutionContext.getContext(SpawnCache.class)).thenReturn(cache);
+    SpawnLogContext spawnLogContext = mock(SpawnLogContext.class);
+    when(actionExecutionContext.getContext(SpawnLogContext.class)).thenReturn(spawnLogContext);
+    when(actionExecutionContext.getExecRoot()).thenReturn(execRoot);
+    ExecutionOptions options =
+        Options.parse(ExecutionOptions.class, "--max_action_stdout_stderr_bytes=4").getOptions();
+
+    // Execute the spawn with a cap below the captured size.
+    SpawnExecException failure =
+        assertThrows(
+            SpawnExecException.class,
+            () ->
+                new TestedSpawnStrategy(spawnRunner, options)
+                    .exec(SIMPLE_SPAWN, actionExecutionContext));
+
+    // Report the same policy failure to the caller and the event bus.
+    assertThat(failure.getSpawnResult().failureDetail().getSpawn().getCode())
+        .isEqualTo(Code.OUTPUT_TOO_LARGE);
+    assertThat(failure.getSpawnResult().status()).isEqualTo(Status.OUTPUT_TOO_LARGE);
+    SpawnExecutedEvent event = (SpawnExecutedEvent) eventHandler.getPosts().get(0);
+    assertThat(event.getSpawnResult()).isSameInstanceAs(failure.getSpawnResult());
+    assertThat(failure).hasMessageThat().contains("--max_action_stdout_stderr_bytes=4");
+    // Keep the local bytes for diagnosis, but close the cache entry without storing.
+    assertThat(stderr ? outErr.errAsLatin1() : outErr.outAsLatin1()).isEqualTo("12345");
+    verify(entry, never()).store(any());
+    verify(entry).close();
+    // Log the rejected result rather than the successful subprocess result.
+    verify(spawnLogContext)
+        .logSpawn(
+            eq(SIMPLE_SPAWN),
+            any(),
+            ArgumentMatchers.<Supplier<SortedMap<PathFragment, ActionInput>>>any(),
+            eq(fs),
+            eq(Duration.ZERO),
+            eq(failure.getSpawnResult()));
+  }
+
+  @Test
+  public void outputLimitPreservesOriginalResult(
+      @TestParameter({"TIMEOUT", "EXECUTION_DENIED"}) Status status) throws Exception {
+    FileSystemUtils.writeContentAsLatin1(outErr.getErrorPath(), "12345");
+    int exitCode = status == Status.TIMEOUT ? SpawnResult.POSIX_TIMEOUT_EXIT_CODE : 2;
+    FailureDetail detail =
+        FailureDetail.newBuilder()
+            .setSpawn(
+                FailureDetails.Spawn.newBuilder()
+                    .setCode(status == Status.TIMEOUT ? Code.TIMEOUT : Code.EXECUTION_DENIED))
+            .build();
+    SpawnResult result =
+        new SpawnResult.Builder()
+            .setStatus(status)
+            .setExitCode(exitCode)
+            .setFailureDetail(detail)
+            .setRunnerName("test")
+            .build();
+    when(spawnRunner.exec(any(), any())).thenReturn(result);
+    when(actionExecutionContext.getExecRoot()).thenReturn(execRoot);
+    ExecutionOptions options =
+        Options.parse(ExecutionOptions.class, "--max_action_stdout_stderr_bytes=4").getOptions();
+
+    SpawnExecException failure =
+        assertThrows(
+            SpawnExecException.class,
+            () ->
+                new TestedSpawnStrategy(spawnRunner, options)
+                    .exec(SIMPLE_SPAWN, actionExecutionContext));
+
+    // Preserve the original execution result; enforce the cap only if a subprocess ran.
+    assertThat(failure.getSpawnResult().status()).isEqualTo(status);
+    assertThat(failure.getSpawnResult().exitCode()).isEqualTo(exitCode);
+    assertThat(failure.getSpawnResult().failureDetail()).isEqualTo(detail);
+    assertThat(failure.getSpawnResult().hasOversizedOutput()).isEqualTo(status == Status.TIMEOUT);
+    if (status == Status.TIMEOUT) {
+      String detailMessage =
+          failure.getSpawnResult().getDetailMessage(failure.getMessage(), false, false);
+      assertThat(detailMessage).contains(failure.getMessage());
+      assertThat(detailMessage).contains("--max_action_stdout_stderr_bytes=4");
+    }
+  }
+
+  @Test
+  public void remoteOutputIsExemptFromLocalLimit() throws Exception {
+    // A remote result is accepted even if its captured log exceeds the local limit.
+    FileSystemUtils.writeContentAsLatin1(outErr.getErrorPath(), "remote stderr");
+    SpawnResult result =
+        new SpawnResult.Builder()
+            .setStatus(Status.SUCCESS)
+            .setRunnerName("remote")
+            .setRemote(true)
+            .build();
+    when(spawnRunner.exec(any(), any())).thenReturn(result);
+    ExecutionOptions options =
+        Options.parse(ExecutionOptions.class, "--max_action_stdout_stderr_bytes=4").getOptions();
+
+    assertThat(
+            new TestedSpawnStrategy(spawnRunner, options)
+                .exec(SIMPLE_SPAWN, actionExecutionContext))
+        .containsExactly(result);
+  }
+
+  @Test
+  public void outputLimitDefaultsToOneGiB() {
+    assertThat(Options.getDefaults(ExecutionOptions.class).getMaxActionStdoutStderrBytes())
+        .isEqualTo(1L << 30);
   }
 
   @Test
@@ -179,7 +310,19 @@ public class AbstractSpawnStrategyTest {
   }
 
   @Test
-  public void testCacheMiss() throws Exception {
+  public void testCacheMiss(@TestParameter({"0", "4"}) long limit) throws Exception {
+    // Both streams may reach the per-stream limit; their sum is not capped.
+    FileSystemUtils.writeContentAsLatin1(outErr.getOutputPath(), "1234");
+    FileSystemUtils.writeContentAsLatin1(outErr.getErrorPath(), "5678");
+    if (limit == 0) {
+      // Model a stream beyond the default cap without allocating a multi-GiB fixture.
+      FileOutErr largeOutErr = spy(outErr);
+      doReturn(2L << 30).when(largeOutErr).outSize();
+      when(actionExecutionContext.getFileOutErr()).thenReturn(largeOutErr);
+    }
+    ExecutionOptions options =
+        Options.parse(ExecutionOptions.class, "--max_action_stdout_stderr_bytes=" + limit)
+            .getOptions();
     SpawnCache cache = mock(SpawnCache.class);
     CacheHandle entry = mock(CacheHandle.class);
     when(cache.lookup(any(Spawn.class), any(SpawnExecutionContext.class))).thenReturn(entry);
@@ -194,7 +337,7 @@ public class AbstractSpawnStrategyTest {
         .thenReturn(spawnResult);
 
     List<SpawnResult> spawnResults =
-        new TestedSpawnStrategy(spawnRunner).exec(SIMPLE_SPAWN, actionExecutionContext);
+        new TestedSpawnStrategy(spawnRunner, options).exec(SIMPLE_SPAWN, actionExecutionContext);
 
     assertThat(spawnResults).containsExactly(spawnResult);
 

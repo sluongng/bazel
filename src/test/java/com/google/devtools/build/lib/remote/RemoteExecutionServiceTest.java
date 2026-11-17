@@ -82,6 +82,7 @@ import com.google.devtools.build.lib.actions.Artifact.TreeArtifact;
 import com.google.devtools.build.lib.actions.Artifact.TreeFileArtifact;
 import com.google.devtools.build.lib.actions.ArtifactRoot;
 import com.google.devtools.build.lib.actions.ArtifactRoot.RootType;
+import com.google.devtools.build.lib.actions.EnvironmentalExecException;
 import com.google.devtools.build.lib.actions.ExecutionRequirements;
 import com.google.devtools.build.lib.actions.FileArtifactValue;
 import com.google.devtools.build.lib.actions.PathMapper;
@@ -92,6 +93,7 @@ import com.google.devtools.build.lib.actions.Spawn;
 import com.google.devtools.build.lib.actions.SpawnInputs;
 import com.google.devtools.build.lib.actions.SpawnResult;
 import com.google.devtools.build.lib.actions.SpawnResult.Status;
+import com.google.devtools.build.lib.actions.UserExecException;
 import com.google.devtools.build.lib.actions.util.ActionsTestUtil;
 import com.google.devtools.build.lib.analysis.SymlinkEntry;
 import com.google.devtools.build.lib.analysis.config.BuildConfigurationValue.RunfileSymlinksMode;
@@ -128,6 +130,7 @@ import com.google.devtools.build.lib.remote.util.InMemoryCacheClient;
 import com.google.devtools.build.lib.remote.util.RxNoGlobalErrorsRule;
 import com.google.devtools.build.lib.remote.util.TracingMetadataUtils;
 import com.google.devtools.build.lib.remote.util.Utils.InMemoryOutput;
+import com.google.devtools.build.lib.server.FailureDetails.Spawn.Code;
 import com.google.devtools.build.lib.skyframe.TreeArtifactValue;
 import com.google.devtools.build.lib.testutil.TestConstants;
 import com.google.devtools.build.lib.testutil.TestThread;
@@ -223,6 +226,7 @@ public class RemoteExecutionServiceTest {
           .build();
 
   RemoteOptions remoteOptions;
+  private ExecutionOptions executionOptions;
   private FileSystem fs;
   private Path execRoot;
   private ArtifactRoot sourceRoot;
@@ -240,6 +244,7 @@ public class RemoteExecutionServiceTest {
     reporter.addHandler(eventHandler);
 
     remoteOptions = Options.getDefaults(RemoteOptions.class);
+    executionOptions = Options.getDefaults(ExecutionOptions.class);
 
     fs = new InMemoryFileSystem(new JavaClock(), DigestHashFunction.SHA256);
 
@@ -2086,8 +2091,16 @@ public class RemoteExecutionServiceTest {
     assertThat(context.isLockOutputFilesCalled()).isFalse();
   }
 
+  private enum ActionOutputStream {
+    STDOUT,
+    STDERR
+  }
+
   @Test
   public void downloadOutputs_nonInlinedStdoutAndStderr_alwaysDownload() throws Exception {
+    // The local capture cap does not apply to digest-backed remote logs.
+    executionOptions =
+        Options.parse(ExecutionOptions.class, "--max_action_stdout_stderr_bytes=1").getOptions();
     // arrange
     Digest dOut = cache.addContents(remoteActionExecutionContext, "stdout");
     Digest dErr = cache.addContents(remoteActionExecutionContext, "stderr");
@@ -2122,6 +2135,9 @@ public class RemoteExecutionServiceTest {
 
   @Test
   public void downloadOutputs_inlinedStdoutAndStderr_alwaysDownload() throws Exception {
+    // Inline logs from remote results are also exempt from the local cap.
+    executionOptions =
+        Options.parse(ExecutionOptions.class, "--max_action_stdout_stderr_bytes=1").getOptions();
     // arrange
     Digest dOut = digestUtil.compute("stdout".getBytes(UTF_8));
     Digest dErr = digestUtil.compute("stderr".getBytes(UTF_8));
@@ -2566,6 +2582,72 @@ public class RemoteExecutionServiceTest {
   }
 
   @Test
+  public void uploadOutputs_oversizedActionOutput_rejectedBeforeScheduling(
+      @TestParameter ActionOutputStream stream) throws Exception {
+    // Set up a successful local spawn whose captured log exceeds the limit.
+    executionOptions =
+        Options.parse(ExecutionOptions.class, "--max_action_stdout_stderr_bytes=6").getOptions();
+    RemoteExecutionService service = newRemoteExecutionService();
+    Spawn spawn = newSpawn(ImmutableMap.of(), ImmutableSet.of());
+    FakeSpawnExecutionContext context = newSpawnExecutionContext(spawn);
+    RemoteAction action = service.buildRemoteAction(spawn, context);
+    SpawnResult spawnResult =
+        new SpawnResult.Builder().setStatus(Status.SUCCESS).setRunnerName("test").build();
+    switch (stream) {
+      case STDOUT -> outErr.getOutputStream().write("too large".getBytes(UTF_8));
+      case STDERR -> outErr.getErrorStream().write("too large".getBytes(UTF_8));
+    }
+    AtomicInteger completionCalls = new AtomicInteger();
+
+    // Ask the remote cache service to upload the result.
+    UserExecException e =
+        assertThrows(
+            UserExecException.class,
+            () ->
+                service.uploadOutputs(
+                    action,
+                    spawnResult,
+                    completionCalls::incrementAndGet,
+                    ConcurrentChangesCheckLevel.OFF));
+
+    // Fail synchronously and release the caller without starting a cache operation.
+    assertThat(e.getFailureDetail().getSpawn().getCode()).isEqualTo(Code.OUTPUT_TOO_LARGE);
+    assertThat(completionCalls.get()).isEqualTo(1);
+    assertThat(cache.getNumFindMissingDigests()).isEmpty();
+    assertThat(eventHandler.getPosts()).isEmpty();
+  }
+
+  @Test
+  public void uploadOutputs_logSizeReadFailure_runsCompletionCallback() throws Exception {
+    // Make reading the size fail before any upload can be scheduled.
+    FileOutErr spyOutErr = spy(outErr);
+    when(spyOutErr.outSize()).thenThrow(new IOException("stat failed"));
+    RemoteExecutionService service = newRemoteExecutionService();
+    Spawn spawn = newSpawn(ImmutableMap.of(), ImmutableSet.of());
+    FakeSpawnExecutionContext context = newSpawnExecutionContext(spawn, spyOutErr);
+    RemoteAction action = service.buildRemoteAction(spawn, context);
+    SpawnResult spawnResult =
+        new SpawnResult.Builder().setStatus(Status.SUCCESS).setRunnerName("test").build();
+    AtomicInteger completionCalls = new AtomicInteger();
+
+    // Try to upload an otherwise successful spawn.
+    EnvironmentalExecException e =
+        assertThrows(
+            EnvironmentalExecException.class,
+            () ->
+                service.uploadOutputs(
+                    action,
+                    spawnResult,
+                    completionCalls::incrementAndGet,
+                    ConcurrentChangesCheckLevel.OFF));
+
+    // Preserve the I/O error and release the caller even though no upload started.
+    assertThat(e).hasCauseThat().hasMessageThat().isEqualTo("stat failed");
+    assertThat(completionCalls.get()).isEqualTo(1);
+    assertThat(cache.getNumFindMissingDigests()).isEmpty();
+  }
+
+  @Test
   public void uploadOutputs_backgroundExecutorRejects_runsCompletionCallback() throws Exception {
     RemoteExecutionService service = newRemoteExecutionService();
     Spawn spawn = newSpawn(ImmutableMap.of(), ImmutableSet.of());
@@ -2828,6 +2910,8 @@ public class RemoteExecutionServiceTest {
 
   @Test
   public void uploadOutputs_stdoutOutput_uploadedAsStdoutDigest() throws Exception {
+    executionOptions =
+        Options.parse(ExecutionOptions.class, "--max_action_stdout_stderr_bytes=1").getOptions();
     // arrange
     Digest stdoutDigest =
         fakeFileCache.createScratchInput(
@@ -3436,7 +3520,7 @@ public class RemoteExecutionServiceTest {
         TestConstants.WORKSPACE_NAME,
         digestUtil,
         remoteOptions,
-        Options.getDefaults(ExecutionOptions.class),
+        executionOptions,
         cache,
         executor,
         tempPathGenerator,

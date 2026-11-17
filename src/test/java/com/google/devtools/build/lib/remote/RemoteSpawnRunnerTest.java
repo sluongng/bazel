@@ -73,6 +73,7 @@ import com.google.devtools.build.lib.actions.Spawn;
 import com.google.devtools.build.lib.actions.SpawnMetrics;
 import com.google.devtools.build.lib.actions.SpawnResult;
 import com.google.devtools.build.lib.actions.SpawnResult.Status;
+import com.google.devtools.build.lib.actions.UserExecException;
 import com.google.devtools.build.lib.actions.util.ActionsTestUtil;
 import com.google.devtools.build.lib.clock.JavaClock;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
@@ -106,6 +107,8 @@ import com.google.devtools.build.lib.remote.options.RemoteOptions;
 import com.google.devtools.build.lib.remote.options.RemoteOutputsMode;
 import com.google.devtools.build.lib.remote.util.DigestUtil;
 import com.google.devtools.build.lib.remote.util.FakeSpawnExecutionContext;
+import com.google.devtools.build.lib.server.FailureDetails;
+import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
 import com.google.devtools.build.lib.testutil.TestConstants;
 import com.google.devtools.build.lib.testutil.TestUtils;
 import com.google.devtools.build.lib.util.ExitCode;
@@ -354,6 +357,24 @@ public class RemoteSpawnRunnerTest {
 
   @Test
   public void cachableSpawnsShouldBeCached_localFallback() throws Exception {
+    checkLocalFallbackUpload(Status.SUCCESS);
+  }
+
+  @Test
+  public void localFallbackOutputRejectionKeepsLocalResult() throws Exception {
+    checkLocalFallbackUpload(Status.OUTPUT_TOO_LARGE);
+  }
+
+  private static UserExecException oversizedOutputFailure(String message) {
+    return new UserExecException(
+        FailureDetail.newBuilder()
+            .setMessage(message)
+            .setSpawn(
+                FailureDetails.Spawn.newBuilder().setCode(FailureDetails.Spawn.Code.OUTPUT_TOO_LARGE))
+            .build());
+  }
+
+  private void checkLocalFallbackUpload(Status expectedStatus) throws Exception {
     remoteOptions =
         Options.parse(RemoteOptions.class, "--remote_print_execution_messages=all").getOptions();
     remoteOptions.setRemoteAcceptCached(true);
@@ -364,7 +385,13 @@ public class RemoteSpawnRunnerTest {
     reporter.addHandler(events);
     RemoteSpawnRunner runner = spy(newSpawnRunner());
     RemoteExecutionService service = runner.getRemoteExecutionService();
-    doNothing().when(service).uploadOutputs(any(), any(), any(), any());
+    if (expectedStatus == Status.OUTPUT_TOO_LARGE) {
+      doThrow(oversizedOutputFailure("oversized local stdout"))
+          .when(service)
+          .uploadOutputs(any(), any(), any(), any());
+    } else {
+      doNothing().when(service).uploadOutputs(any(), any(), any(), any());
+    }
 
     // A remote result with a server message fails to download, so the local runner takes over.
     ExecuteResponse response =
@@ -392,8 +419,10 @@ public class RemoteSpawnRunnerTest {
     SpawnExecutionContext policy = getSpawnContext(spawn);
 
     SpawnResult result = runner.exec(spawn, policy);
-    assertThat(result).isSameInstanceAs(res);
-    // The server message remains visible without becoming local action stderr.
+    // A rejection must still be attributed to the runner that executed the spawn.
+    assertThat(result.status()).isEqualTo(expectedStatus);
+    assertThat(result.getRunnerName()).isEqualTo("local");
+    assertThat(result.getWallTimeInMs()).isEqualTo(25);
     assertThat(policy.getFileOutErr().errAsLatin1()).isEmpty();
     assertThat(
             events.getEvents().stream()

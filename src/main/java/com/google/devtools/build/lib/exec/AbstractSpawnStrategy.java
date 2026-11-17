@@ -33,6 +33,7 @@ import com.google.devtools.build.lib.actions.SpawnExecutedEvent;
 import com.google.devtools.build.lib.actions.SpawnResult;
 import com.google.devtools.build.lib.actions.SpawnResult.Status;
 import com.google.devtools.build.lib.actions.Spawns;
+import com.google.devtools.build.lib.actions.UserExecException;
 import com.google.devtools.build.lib.events.ExtendedEventHandler;
 import com.google.devtools.build.lib.exec.Protos.Digest;
 import com.google.devtools.build.lib.exec.SpawnCache.CacheHandle;
@@ -130,11 +131,16 @@ public abstract class AbstractSpawnStrategy implements SandboxedSpawnStrategy {
     try (CacheHandle cacheHandle = cache.lookup(spawn, context)) {
       if (cacheHandle.hasResult()) {
         spawnResult = Preconditions.checkNotNull(cacheHandle.getResult());
+        spawnResult = checkActionOutput(actionExecutionContext.getFileOutErr(), spawnResult);
       } else {
         Instant startTime =
             Instant.ofEpochMilli(actionExecutionContext.getClock().currentTimeMillis());
         // Actual execution.
         spawnResult = spawnRunner.exec(spawn, context);
+
+        // Check before store(): remote caches can start uploading asynchronously from that call.
+        // Worker responses have already been fully consumed and the worker returned to its pool.
+        spawnResult = checkActionOutput(actionExecutionContext.getFileOutErr(), spawnResult);
 
         String spawnIdentifier = null;
         if (spawnResult.getDigest() != null) {
@@ -151,7 +157,7 @@ public abstract class AbstractSpawnStrategy implements SandboxedSpawnStrategy {
                     spawnResult,
                     startTime,
                     spawnIdentifier));
-        if (cacheHandle.willStore()) {
+        if (!spawnResult.hasOversizedOutput() && cacheHandle.willStore()) {
           cacheHandle.store(spawnResult);
         }
       }
@@ -212,6 +218,22 @@ public abstract class AbstractSpawnStrategy implements SandboxedSpawnStrategy {
       throw new SpawnExecException(message, spawnResult, /* forciblyRunRemotely= */ false);
     }
     return ImmutableList.of(spawnResult);
+  }
+
+  private SpawnResult checkActionOutput(FileOutErr outErr, SpawnResult result) throws IOException {
+    // The remote service is responsible for bounding output from remote results.
+    if (executionOptions.getMaxActionStdoutStderrBytes() == 0
+        || result.wasRemote()
+        || !result.setupSuccess()
+        || result.hasOversizedOutput()) {
+      return result;
+    }
+    try {
+      executionOptions.checkActionOutputSizes(outErr.outSize(), outErr.errSize());
+      return result;
+    } catch (UserExecException e) {
+      return result.withOversizedOutput(e.getFailureDetail());
+    }
   }
 
   private final class SpawnExecutionContextImpl extends AbstractSpawnExecutionContext {

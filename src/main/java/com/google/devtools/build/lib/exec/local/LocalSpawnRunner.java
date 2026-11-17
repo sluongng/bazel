@@ -541,6 +541,7 @@ public class LocalSpawnRunner implements SpawnRunner {
       case NON_ZERO_EXIT -> spawnFailure.setCode(Code.NON_ZERO_EXIT).setSpawnExitCode(exitCode);
       case TIMEOUT -> spawnFailure.setCode(Code.TIMEOUT);
       case OUT_OF_MEMORY -> spawnFailure.setCode(Code.OUT_OF_MEMORY);
+      case OUTPUT_TOO_LARGE -> spawnFailure.setCode(Code.OUTPUT_TOO_LARGE);
       case EXECUTION_FAILED -> spawnFailure.setCode(Code.EXECUTION_FAILED);
       case EXECUTION_FAILED_CATASTROPHICALLY ->
           spawnFailure.setCode(Code.EXECUTION_FAILED).setCatastrophic(true);

@@ -18,9 +18,13 @@ import com.google.common.collect.Iterables;
 import com.google.devtools.build.lib.actions.ActionExecutionContext.ShowSubcommands;
 import com.google.devtools.build.lib.actions.LocalHostCapacity;
 import com.google.devtools.build.lib.actions.ResourceSet;
+import com.google.devtools.build.lib.actions.UserExecException;
 import com.google.devtools.build.lib.analysis.config.CoreOptionConverters.LabelConverter;
 import com.google.devtools.build.lib.analysis.config.PerLabelOptions;
 import com.google.devtools.build.lib.cmdline.Label;
+import com.google.devtools.build.lib.server.FailureDetails;
+import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
+import com.google.devtools.build.lib.server.FailureDetails.Spawn.Code;
 import com.google.devtools.build.lib.util.OptionsUtils;
 import com.google.devtools.build.lib.util.RegexFilter;
 import com.google.devtools.build.lib.util.ResourceConverter;
@@ -60,6 +64,46 @@ import javax.annotation.Nullable;
  */
 @OptionsClass
 public abstract class ExecutionOptions extends OptionsBase {
+
+  @Option(
+      name = "max_action_stdout_stderr_bytes",
+      defaultValue = "1G",
+      converter = Converters.ByteSizeConverter.class,
+      documentationCategory = OptionDocumentationCategory.EXECUTION_STRATEGY,
+      effectTags = {OptionEffectTag.EXECUTION},
+      help =
+          "Maximum size in bytes of each stdout and stderr stream captured from a locally executed"
+              + " action, including persistent worker responses and local fallback. K, M, G and T"
+              + " suffixes denote powers of 1024. Zero disables the limit. Bazel checks after"
+              + " execution and before caching the result. Oversized local logs are kept on disk"
+              + " but are not attached to post-execution build events. This limit does not apply"
+              + " to remote execution or remote cache results; remote services are responsible for"
+              + " limiting their own output. Test logs captured as stdout count; declared spawn"
+              + " outputs, including redirected stdout, are exempt. Live test streaming, worker"
+              + " protocol traffic, lifetime worker stderr, and existing local action-cache"
+              + " results are not checked.")
+  public abstract long getMaxActionStdoutStderrBytes();
+
+  /** Fails if either stream exceeds the configured limit; zero means unlimited. */
+  public final void checkActionOutputSizes(long stdoutSize, long stderrSize)
+      throws UserExecException {
+    long limit = getMaxActionStdoutStderrBytes();
+    if (limit == 0 || (stdoutSize <= limit && stderrSize <= limit)) {
+      return;
+    }
+    String message =
+        String.format(
+            "Action stdout or stderr exceeds --max_action_stdout_stderr_bytes=%d: stdout is %d"
+                + " bytes, stderr is %d bytes. Reduce diagnostic output, write large data to"
+                + " declared output files, or increase --max_action_stdout_stderr_bytes (0 disables"
+                + " the limit).",
+            limit, stdoutSize, stderrSize);
+    throw new UserExecException(
+        FailureDetail.newBuilder()
+            .setMessage(message)
+            .setSpawn(FailureDetails.Spawn.newBuilder().setCode(Code.OUTPUT_TOO_LARGE))
+            .build());
+  }
 
   @Option(
       name = "spawn_strategy",

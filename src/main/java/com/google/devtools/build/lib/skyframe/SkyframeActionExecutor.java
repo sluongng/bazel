@@ -247,6 +247,7 @@ public final class SkyframeActionExecutor {
   private ActionInputPrefetcher actionInputPrefetcher;
   private String actionExecutionSalt;
   private int maxStdoutErrBytes;
+  private long maxActionOutputBytes;
 
   /** These variables are nulled out between executions. */
   @Nullable private ProgressSupplier progressSupplier;
@@ -380,6 +381,8 @@ public final class SkyframeActionExecutor {
     this.bustActionCachesTargets = buildRequestOptions.getBustActionCachesTargets();
     this.invocationRetriesEnabled =
         options.getOptions(ExecutionOptions.class).getRemoteRetryOnTransientCacheError() > 0;
+    this.maxActionOutputBytes =
+        options.getOptions(ExecutionOptions.class).getMaxActionStdoutStderrBytes();
     this.outputService = checkNotNull(outputService);
     this.outputDirectoryHelper = outputDirectoryHelper;
 
@@ -1689,7 +1692,7 @@ public final class SkyframeActionExecutor {
     // so that we do not print it again in upper levels.
     // Note that we need to report it here since we want immediate feedback of the errors
     // and in some cases the upper-level printing mechanism only prints one of the errors.
-    return printError(e.getMessage(), e.getAction(), outErrBuffer)
+    return printError(e.getMessage(), e.getAction(), outErrBuffer, hasRejectedActionOutput(e))
         ? new AlreadyReportedActionExecutionException(e)
         : e;
   }
@@ -1985,7 +1988,7 @@ public final class SkyframeActionExecutor {
     if (cause != null && cause.getMessage() != null) {
       reportMessage += ": " + cause.getMessage();
     }
-    printError(reportMessage, action, actionOutput);
+    printError(reportMessage, action, actionOutput, /* rejectedOutput= */ false);
     return ex;
   }
 
@@ -2002,7 +2005,7 @@ public final class SkyframeActionExecutor {
    * for the same action if there are multiple errors: will print all of them.
    */
   void printError(String message, ActionAnalysisMetadata action) {
-    printError(message, action, null);
+    printError(message, action, null, /* rejectedOutput= */ false);
   }
 
   /**
@@ -2014,10 +2017,14 @@ public final class SkyframeActionExecutor {
    * @param action The action that failed, must not be null.
    * @param actionOutput The output of the failed Action. May be null, if there is no output to
    *     display
+   * @param rejectedOutput whether the local capture policy rejected a stream
    * @return whether error was printed
    */
   private boolean printError(
-      String message, ActionAnalysisMetadata action, @Nullable FileOutErr actionOutput) {
+      String message,
+      ActionAnalysisMetadata action,
+      @Nullable FileOutErr actionOutput,
+      boolean rejectedOutput) {
     String describe = action.describe();
     Label ownerLabel = action.getOwner().getLabel();
     if (ownerLabel != null && !describe.contains(ownerLabel.toString())) {
@@ -2026,7 +2033,10 @@ public final class SkyframeActionExecutor {
       message = describe + " failed: " + message;
     }
     return dumpRecordedOutErr(
-        reporter, Event.error(action.getOwner().getLocation(), message), actionOutput);
+        reporter,
+        Event.error(action.getOwner().getLocation(), message),
+        actionOutput,
+        rejectedOutput);
   }
 
   /**
@@ -2038,7 +2048,7 @@ public final class SkyframeActionExecutor {
   private void dumpRecordedOutErr(
       EventHandler eventHandler, Action action, FileOutErr outErrBuffer) {
     Event event = Event.info("From " + action.describe() + ":");
-    dumpRecordedOutErr(eventHandler, event, outErrBuffer);
+    dumpRecordedOutErr(eventHandler, event, outErrBuffer, /* rejectedOutput= */ false);
   }
 
   /**
@@ -2046,10 +2056,14 @@ public final class SkyframeActionExecutor {
    *
    * @param prefixEvent An event to post before dumping the output
    * @param outErrBuffer The OutErr that recorded the actions output
+   * @param rejectedOutput whether the local capture policy rejected a stream
    * @return whether output was displayed (false if aborting)
    */
   private boolean dumpRecordedOutErr(
-      EventHandler eventHandler, Event prefixEvent, FileOutErr outErrBuffer) {
+      EventHandler eventHandler,
+      Event prefixEvent,
+      FileOutErr outErrBuffer,
+      boolean rejectedOutput) {
     // For some actions (e.g., many local actions) the pollInterruptedStatus()
     // won't notice that we had an interrupted job. It will continue.
     // For that reason we must take care to NOT report errors if we're
@@ -2057,13 +2071,30 @@ public final class SkyframeActionExecutor {
     if (isBuilderAborting()) {
       return false;
     }
-    if (outErrBuffer != null && outErrBuffer.hasRecordedOutput()) {
-      // Bind the output to the prefix event.
-      eventHandler.handle(prefixEvent.withProcessOutput(new ActionOutputEventData(outErrBuffer)));
-      informImportantOutputHandlerIfNecessary(outErrBuffer);
-    } else {
+    if (outErrBuffer == null || !outErrBuffer.hasRecordedOutput()) {
       eventHandler.handle(prefixEvent);
+      return true;
     }
+
+    // The UI can copy the process output into BEP progress events. Filter before attaching it.
+    boolean hasStdout = outErrBuffer.hasRecordedStdout();
+    boolean hasStderr = outErrBuffer.hasRecordedStderr();
+    boolean publishStdout =
+        hasStdout && canPublishActionOutput(outErrBuffer.getOutputPath(), rejectedOutput);
+    boolean publishStderr =
+        hasStderr && canPublishActionOutput(outErrBuffer.getErrorPath(), rejectedOutput);
+    eventHandler.handle(
+        prefixEvent.withProcessOutput(
+            new ActionOutputEventData(outErrBuffer, publishStdout, publishStderr)));
+    if (hasStdout && !publishStdout) {
+      eventHandler.handle(
+          Event.info("Action stdout was not published; see " + outErrBuffer.getOutputPath()));
+    }
+    if (hasStderr && !publishStderr) {
+      eventHandler.handle(
+          Event.info("Action stderr was not published; see " + outErrBuffer.getErrorPath()));
+    }
+    informImportantOutputHandlerIfNecessary(outErrBuffer, publishStdout, publishStderr);
     return true;
   }
 
@@ -2074,16 +2105,17 @@ public final class SkyframeActionExecutor {
    * Promoting them to important outputs ensures that the user can access the file at the printed
    * path.
    */
-  private void informImportantOutputHandlerIfNecessary(FileOutErr outErr) {
+  private void informImportantOutputHandlerIfNecessary(
+      FileOutErr outErr, boolean publishStdout, boolean publishStderr) {
     var importantOutputHandler = executorEngine.getContext(ImportantOutputHandler.class);
     if (importantOutputHandler == null) {
       return;
     }
     try {
-      if (outErr.outSize() > maxStdoutErrBytes) {
+      if (publishStdout && outErr.outSize() > maxStdoutErrBytes) {
         importantOutputHandler.processTooLargeStdoutErr(outErr.getOutputPath());
       }
-      if (outErr.errSize() > maxStdoutErrBytes) {
+      if (publishStderr && outErr.errSize() > maxStdoutErrBytes) {
         importantOutputHandler.processTooLargeStdoutErr(outErr.getErrorPath());
       }
     } catch (IOException | ImportantOutputException e) {
@@ -2095,7 +2127,7 @@ public final class SkyframeActionExecutor {
     }
   }
 
-  private static void reportActionExecution(
+  private void reportActionExecution(
       ExtendedEventHandler eventHandler,
       Path primaryOutputPath,
       @Nullable FileArtifactValue primaryOutputMetadata,
@@ -2106,11 +2138,16 @@ public final class SkyframeActionExecutor {
       ErrorTiming errorTiming) {
     Path stdout = null;
     Path stderr = null;
+    boolean rejectedOutput = hasRejectedActionOutput(exception);
 
-    if (outErr.hasRecordedStdout()) {
+    // Failed actions are published to BES too. Do not turn rejection of an oversized diagnostic
+    // stream into another upload of that same file. Keep the local files for diagnosis.
+    if (outErr.hasRecordedStdout()
+        && canPublishActionOutput(outErr.getOutputPath(), rejectedOutput)) {
       stdout = outErr.getOutputPath();
     }
-    if (outErr.hasRecordedStderr()) {
+    if (outErr.hasRecordedStderr()
+        && canPublishActionOutput(outErr.getErrorPath(), rejectedOutput)) {
       stderr = outErr.getErrorPath();
     }
     // Collect MetadataLogs and spawn start times/end times from the Action's SpawnResults.
@@ -2147,6 +2184,24 @@ public final class SkyframeActionExecutor {
             firstStartTime.equals(Instant.MAX) ? null : firstStartTime,
             lastEndTime.equals(Instant.MIN) ? null : lastEndTime,
             strategyDetails.build()));
+  }
+
+  private static boolean hasRejectedActionOutput(@Nullable ActionExecutionException exception) {
+    return exception instanceof SpawnActionExecutionException spawnException
+        && spawnException.getSpawnResult().hasOversizedOutput();
+  }
+
+  private boolean canPublishActionOutput(Path path, boolean rejectedOutput) {
+    if (!rejectedOutput || maxActionOutputBytes == 0) {
+      return true;
+    }
+    try {
+      return path.getFileSize() <= maxActionOutputBytes;
+    } catch (IOException e) {
+      // Without a size, do not risk an unbounded upload while reporting another action failure.
+      logger.atWarning().withCause(e).log("Cannot read action output size for reporting: %s", path);
+      return false;
+    }
   }
 
   /**
@@ -2188,9 +2243,13 @@ public final class SkyframeActionExecutor {
   /** Adapts a {@link FileOutErr} to an {@link Event.ProcessOutput}. */
   private static final class ActionOutputEventData implements Event.ProcessOutput {
     private final FileOutErr fileOutErr;
+    private final boolean publishStdout;
+    private final boolean publishStderr;
 
-    ActionOutputEventData(FileOutErr fileOutErr) {
+    ActionOutputEventData(FileOutErr fileOutErr, boolean publishStdout, boolean publishStderr) {
       this.fileOutErr = fileOutErr;
+      this.publishStdout = publishStdout;
+      this.publishStderr = publishStderr;
     }
 
     @Override
@@ -2200,12 +2259,12 @@ public final class SkyframeActionExecutor {
 
     @Override
     public long getStdOutSize() throws IOException {
-      return fileOutErr.outSize();
+      return publishStdout ? fileOutErr.outSize() : 0;
     }
 
     @Override
     public byte[] getStdOut() {
-      return fileOutErr.outAsBytes();
+      return publishStdout ? fileOutErr.outAsBytes() : new byte[0];
     }
 
     @Override
@@ -2215,12 +2274,12 @@ public final class SkyframeActionExecutor {
 
     @Override
     public long getStdErrSize() throws IOException {
-      return fileOutErr.errSize();
+      return publishStderr ? fileOutErr.errSize() : 0;
     }
 
     @Override
     public byte[] getStdErr() {
-      return fileOutErr.errAsBytes();
+      return publishStderr ? fileOutErr.errAsBytes() : new byte[0];
     }
   }
 }

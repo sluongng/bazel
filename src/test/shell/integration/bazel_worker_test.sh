@@ -321,6 +321,41 @@ EOF
   assert_equals "$worker_uuid_1" "$worker_uuid_2"
 }
 
+function test_action_output_limit_preserves_worker() {
+  # Set up three requests with identical diagnostics but distinct declared outputs.
+  prepare_example_worker
+  for target in before oversized after; do
+    cat >>BUILD <<EOF
+work(
+  name = "${target}",
+  worker = ":worker",
+  worker_args = ["--worker_protocol=${WORKER_PROTOCOL}"],
+  args = ["--write_uuid", "--write_counter", "--diagnostic_output=worker diagnostics"],
+)
+EOF
+  done
+
+  # Make a successful request and record the worker identity from the declared output.
+  bazel build :before --max_action_stdout_stderr_bytes=4096 &> "$TEST_log" \
+    || fail "initial worker request failed"
+  assert_contains "COUNTER 1" "$BINS/before.out"
+  local worker_uuid
+  worker_uuid=$(grep UUID "$BINS/before.out" | cut -d' ' -f2)
+
+  # Lower the cap so the same response diagnostics now fail as captured stderr.
+  bazel build :oversized --max_action_stdout_stderr_bytes=1 &> "$TEST_log" \
+    && fail "oversized worker response unexpectedly succeeded"
+  expect_log "Action stdout or stderr exceeds --max_action_stdout_stderr_bytes=1:"
+  expect_log "stdout is 0 bytes, stderr is [1-9][0-9]* bytes"
+
+  # Restore the cap: the same worker must answer again, including the rejected request
+  # in its counter.
+  bazel build :after --max_action_stdout_stderr_bytes=4096 &> "$TEST_log" \
+    || fail "worker request after rejected output failed"
+  assert_contains "COUNTER 3" "$BINS/after.out"
+  assert_equals "$worker_uuid" "$(grep UUID "$BINS/after.out" | cut -d' ' -f2)"
+}
+
 function test_worker_extra_flag() {
   prepare_example_worker
   cat >>BUILD <<EOF

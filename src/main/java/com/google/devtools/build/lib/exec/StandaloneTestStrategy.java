@@ -682,7 +682,9 @@ public class StandaloneTestStrategy extends TestStrategy {
       testResultDataBuilder = TestResultData.newBuilder();
       testResultDataBuilder.setCachable(true).setTestPassed(true).setStatus(BlazeTestStatus.PASSED);
     } catch (SpawnExecException e) {
-      if (e.isCatastrophic()) {
+      // An output policy rejection must not become a retryable/cached test failure or have its
+      // diagnostics appended to the test log and published as test-attempt output.
+      if (e.isCatastrophic() || e.getSpawnResult().hasOversizedOutput()) {
         closeSuppressed(e, streamed);
         closeSuppressed(e, fileOutErr);
         throw e;
@@ -814,7 +816,7 @@ public class StandaloneTestStrategy extends TestStrategy {
         try {
           spawnStrategyResolver.exec(coveragePostProcessingSpawn, coverageActionExecutionContext);
         } catch (SpawnExecException e) {
-          if (e.isCatastrophic()) {
+          if (e.isCatastrophic() || e.getSpawnResult().hasOversizedOutput()) {
             closeSuppressed(e, streamed);
             closeSuppressed(e, fileOutErr);
             closeSuppressed(e, coverageOutErr);

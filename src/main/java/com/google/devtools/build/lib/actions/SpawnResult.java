@@ -56,6 +56,9 @@ public interface SpawnResult {
      */
     OUT_OF_MEMORY(true),
 
+    /** A successful subprocess exceeded the limit on captured diagnostics. */
+    OUTPUT_TOO_LARGE(true),
+
     /**
      * Subprocess did not execute, it's not the user's fault, and the error is not catastrophic. If
      * keep_going is enabled then Bazel will try to continue the build, possibly will attempt to
@@ -108,7 +111,7 @@ public interface SpawnResult {
   /**
    * Returns whether the spawn was actually run, regardless of the exit code. I.e., returns {@code
    * true} if {@link #status} is any of {@link Status#SUCCESS}, {@link Status#NON_ZERO_EXIT}, {@link
-   * Status#TIMEOUT} or {@link Status#OUT_OF_MEMORY}.
+   * Status#TIMEOUT}, {@link Status#OUT_OF_MEMORY} or {@link Status#OUTPUT_TOO_LARGE}.
    *
    * <p>Returns false if there were errors that prevented the spawn from being run, such as network
    * errors, missing local files, errors setting up sandboxing, etc.
@@ -118,7 +121,8 @@ public interface SpawnResult {
     return status == Status.SUCCESS
         || status == Status.NON_ZERO_EXIT
         || status == Status.TIMEOUT
-        || status == Status.OUT_OF_MEMORY;
+        || status == Status.OUT_OF_MEMORY
+        || status == Status.OUTPUT_TOO_LARGE;
   }
 
   /**
@@ -248,6 +252,59 @@ public interface SpawnResult {
 
   /** Returns whether the spawn result was a cache hit. */
   boolean isCacheHit();
+
+  /** Whether captured output exceeded the configured limit, even if the spawn also failed. */
+  default boolean hasOversizedOutput() {
+    return status() == Status.OUTPUT_TOO_LARGE;
+  }
+
+  /**
+   * Records an output policy failure without losing execution metadata or an existing failure.
+   * Returns this result unchanged if there was no output policy failure.
+   */
+  default SpawnResult withOversizedOutput(@Nullable FailureDetail failure) {
+    if (failure == null) {
+      return this;
+    }
+    boolean succeeded = status() == Status.SUCCESS;
+    return new DelegateSpawnResult(this) {
+      @Override
+      public Status status() {
+        return succeeded ? Status.OUTPUT_TOO_LARGE : super.status();
+      }
+
+      @Override
+      public int exitCode() {
+        return succeeded ? 1 : super.exitCode();
+      }
+
+      @Override
+      public boolean hasOversizedOutput() {
+        return true;
+      }
+
+      @Override
+      @Nullable
+      public FailureDetail failureDetail() {
+        return succeeded ? failure : super.failureDetail();
+      }
+
+      @Override
+      public String getFailureMessage() {
+        return succeeded ? failure.getMessage() : super.getFailureMessage();
+      }
+
+      @Override
+      public String getDetailMessage(
+          String message, boolean catastrophe, boolean forciblyRunRemotely) {
+        return succeeded
+            ? message
+            : super.getDetailMessage(message, catastrophe, forciblyRunRemotely)
+                + "\n"
+                + failure.getMessage();
+      }
+    };
+  }
 
   /** Returns an optional custom failure message for the result. */
   default String getFailureMessage() {
@@ -503,6 +560,11 @@ public interface SpawnResult {
     @Override
     public Status status() {
       return delegate.status();
+    }
+
+    @Override
+    public boolean hasOversizedOutput() {
+      return delegate.hasOversizedOutput();
     }
 
     @Override
