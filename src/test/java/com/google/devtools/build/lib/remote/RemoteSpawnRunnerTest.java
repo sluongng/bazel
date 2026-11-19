@@ -77,7 +77,10 @@ import com.google.devtools.build.lib.actions.util.ActionsTestUtil;
 import com.google.devtools.build.lib.clock.JavaClock;
 import com.google.devtools.build.lib.collect.nestedset.NestedSetBuilder;
 import com.google.devtools.build.lib.collect.nestedset.Order;
+import com.google.devtools.build.lib.events.Event;
 import com.google.devtools.build.lib.events.EventBusEventHandler;
+import com.google.devtools.build.lib.events.EventKind;
+import com.google.devtools.build.lib.events.StoredEventHandler;
 import com.google.devtools.build.lib.events.Reporter;
 import com.google.devtools.build.lib.exec.AbstractSpawnStrategy;
 import com.google.devtools.build.lib.exec.ExecutionOptions;
@@ -351,29 +354,37 @@ public class RemoteSpawnRunnerTest {
 
   @Test
   public void cachableSpawnsShouldBeCached_localFallback() throws Exception {
-    // Test that if a cacheable spawn is executed locally due to the local fallback,
-    // that its result is uploaded to the remote cache.
-
+    remoteOptions =
+        Options.parse(RemoteOptions.class, "--remote_print_execution_messages=all").getOptions();
     remoteOptions.setRemoteAcceptCached(true);
     remoteOptions.setRemoteLocalFallback(true);
     remoteOptions.setRemoteUploadLocalResults(true);
 
+    StoredEventHandler events = new StoredEventHandler();
+    reporter.addHandler(events);
     RemoteSpawnRunner runner = spy(newSpawnRunner());
     RemoteExecutionService service = runner.getRemoteExecutionService();
     doNothing().when(service).uploadOutputs(any(), any(), any(), any());
 
-    // Throw an IOException to trigger the local fallback.
+    // A remote result with a server message fails to download, so the local runner takes over.
+    ExecuteResponse response =
+        ExecuteResponse.newBuilder()
+            .setResult(ActionResult.getDefaultInstance())
+            .setMessage("message from remote execution")
+            .build();
     when(executor.executeRemotely(
             any(RemoteActionExecutionContext.class),
             any(ExecuteRequest.class),
             any(OperationObserver.class)))
-        .thenThrow(IOException.class);
+        .thenReturn(response);
+    doThrow(new IOException("download failed")).when(service).downloadOutputs(any(), any());
 
     SpawnResult res =
         new SpawnResult.Builder()
             .setStatus(Status.SUCCESS)
             .setExitCode(0)
-            .setRunnerName("test")
+            .setRunnerName("local")
+            .setWallTimeInMs(25)
             .build();
     when(localRunner.exec(any(Spawn.class), any(SpawnExecutionContext.class))).thenReturn(res);
 
@@ -381,8 +392,15 @@ public class RemoteSpawnRunnerTest {
     SpawnExecutionContext policy = getSpawnContext(spawn);
 
     SpawnResult result = runner.exec(spawn, policy);
-    assertThat(result.exitCode()).isEqualTo(0);
-    assertThat(result.status()).isEqualTo(Status.SUCCESS);
+    assertThat(result).isSameInstanceAs(res);
+    // The server message remains visible without becoming local action stderr.
+    assertThat(policy.getFileOutErr().errAsLatin1()).isEmpty();
+    assertThat(
+            events.getEvents().stream()
+                .filter(e -> e.getKind() == EventKind.STDERR)
+                .map(Event::getMessage)
+                .toList())
+        .contains("Remote server execution message: message from remote execution\n");
     verify(localRunner).exec(eq(spawn), eq(policy));
     verify(runner)
         .execLocallyAndUpload(any(), eq(spawn), eq(policy), /* uploadLocalResults= */ eq(true));

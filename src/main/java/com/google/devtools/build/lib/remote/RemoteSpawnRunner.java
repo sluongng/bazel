@@ -45,6 +45,7 @@ import com.google.devtools.build.lib.clock.BlazeClock;
 import com.google.devtools.build.lib.clock.BlazeClock.MillisSinceEpochToNanosConverter;
 import com.google.devtools.build.lib.concurrent.ThreadSafety.ThreadSafe;
 import com.google.devtools.build.lib.events.Event;
+import com.google.devtools.build.lib.events.EventKind;
 import com.google.devtools.build.lib.events.Reporter;
 import com.google.devtools.build.lib.exec.AbstractSpawnStrategy;
 import com.google.devtools.build.lib.exec.RemoteLocalFallbackRegistry;
@@ -70,7 +71,6 @@ import com.google.devtools.build.lib.remote.util.Utils.InMemoryOutput;
 import com.google.devtools.build.lib.server.FailureDetails;
 import com.google.devtools.build.lib.server.FailureDetails.FailureDetail;
 import com.google.devtools.build.lib.util.ExitCode;
-import com.google.devtools.build.lib.util.io.FileOutErr;
 import com.google.devtools.build.lib.vfs.Path;
 import com.google.longrunning.Operation;
 import com.google.protobuf.Any;
@@ -333,7 +333,7 @@ public class RemoteSpawnRunner implements SpawnRunner {
               throw StatusProto.toStatusRuntimeException(status);
             }
 
-            maybePrintExecutionMessages(context, result.getMessage(), result.success());
+            maybePrintExecutionMessages(result.getMessage(), result.success());
 
             profileAccounting(clampTimeNanos, result.getExecutionMetadata());
             spawnMetricsAccounting(spawnMetrics, result.getExecutionMetadata());
@@ -535,14 +535,13 @@ public class RemoteSpawnRunner implements SpawnRunner {
     return true;
   }
 
-  private void maybePrintExecutionMessages(
-      SpawnExecutionContext context, String message, boolean success) {
-    FileOutErr outErr = context.getFileOutErr();
+  private void maybePrintExecutionMessages(String message, boolean success) {
     boolean printMessage =
         remoteOptions.getRemotePrintExecutionMessages().shouldPrintMessages(success)
             && !message.isEmpty();
     if (printMessage) {
-      outErr.printErr("Remote server execution message: " + message + "\n");
+      // Server diagnostics are not part of the action streams or the local fallback's capture.
+      report(Event.of(EventKind.STDERR, "Remote server execution message: " + message + "\n"));
     }
   }
 
@@ -594,11 +593,10 @@ public class RemoteSpawnRunner implements SpawnRunner {
     if (remoteOptions.getRemoteLocalFallback() && !RemoteRetrierUtils.causedByExecTimeout(cause)) {
       return execLocallyAndUpload(action, spawn, context, uploadLocalResults);
     }
-    return handleError(action, cause, context);
+    return handleError(action, cause);
   }
 
-  private SpawnResult handleError(
-      RemoteAction action, IOException exception, SpawnExecutionContext context)
+  private SpawnResult handleError(RemoteAction action, IOException exception)
       throws ExecException, InterruptedException, IOException {
     if (exception instanceof RemoteExecutionCapabilitiesException e) {
       throw createExecExceptionFromRemoteExecutionCapabilitiesException(e);
@@ -618,7 +616,7 @@ public class RemoteSpawnRunner implements SpawnRunner {
         }
       }
       if (e.isExecutionTimeout()) {
-        maybePrintExecutionMessages(context, e.getResponse().getMessage(), /* success= */ false);
+        maybePrintExecutionMessages(e.getResponse().getMessage(), /* success= */ false);
         SpawnResult.Builder resultBuilder =
             new SpawnResult.Builder()
                 .setRunnerName(getName())
