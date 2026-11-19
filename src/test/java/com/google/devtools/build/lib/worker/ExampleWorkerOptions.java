@@ -31,6 +31,14 @@ public abstract class ExampleWorkerOptions extends OptionsBase {
   @OptionsClass
   public abstract static class ExampleWorkOptions extends OptionsBase {
     @Option(
+        name = "diagnostic_output",
+        documentationCategory = OptionDocumentationCategory.UNCATEGORIZED,
+        effectTags = {OptionEffectTag.NO_OP},
+        defaultValue = "",
+        help = "Diagnostic text to include in the worker response output.")
+    public abstract String getDiagnosticOutput();
+
+    @Option(
         name = "output_file",
         documentationCategory = OptionDocumentationCategory.UNCATEGORIZED,
         effectTags = {OptionEffectTag.NO_OP},

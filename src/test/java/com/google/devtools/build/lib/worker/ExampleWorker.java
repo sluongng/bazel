@@ -162,7 +162,7 @@ public final class ExampleWorker {
 
     } else {
       // This is a single invocation of the example that exits after it processed the request.
-      parseOptionsAndLog(ImmutableList.copyOf(args));
+      parseOptionsAndLog(ImmutableList.copyOf(args), new PrintWriter(System.err, true));
     }
   }
 
@@ -214,7 +214,7 @@ public final class ExampleWorker {
             originalStdErr.println("VERBOSE: Pretending to do work.");
             originalStdErr.println("VERBOSE: Running in " + new File(".").getAbsolutePath());
           }
-          parseOptionsAndLog(args);
+          parseOptionsAndLog(args, err);
         } catch (Exception e) {
           e.printStackTrace();
           return 1;
@@ -246,7 +246,7 @@ public final class ExampleWorker {
     return 0;
   }
 
-  private static void parseOptionsAndLog(List<String> args) throws Exception {
+  private static void parseOptionsAndLog(List<String> args, PrintWriter err) throws Exception {
     ImmutableList.Builder<String> expandedArgs = ImmutableList.builder();
     for (String arg : args) {
       Matcher flagFileMatcher = FLAG_FILE_PATTERN.matcher(arg);
@@ -261,6 +261,9 @@ public final class ExampleWorker {
         OptionsParser.builder().optionsClasses(ExampleWorkOptions.class).allowResidue(true).build();
     parser.parse(expandedArgs.build());
     ExampleWorkOptions options = parser.getOptions(ExampleWorkOptions.class);
+
+    err.print(options.getDiagnosticOutput());
+    err.flush();
 
     List<String> outputs = new ArrayList<>();
 

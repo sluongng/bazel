@@ -190,13 +190,14 @@ EOF
 }
 
 function test_example_worker() {
+  # Give only the first request a diagnostic; both still write a declared output.
   prepare_example_worker
   cat >>BUILD <<EOF
 work(
   name = "hello_world",
   worker = ":worker",
   worker_args = ["--worker_protocol=${WORKER_PROTOCOL}"],
-  args = ["hello world"],
+  args = ["hello world", "--diagnostic_output=diagnostic from request"],
 )
 
 work(
@@ -207,12 +208,16 @@ work(
 )
 EOF
 
-  bazel build  :hello_world &> "$TEST_log" \
+  # Require worker execution to observe the response, not one-shot stderr.
+  bazel build :hello_world --strategy=Work=worker &> "$TEST_log" \
     || fail "build failed"
+  expect_log "diagnostic from request"
   assert_equals "hello world" "$(cat $BINS/hello_world.out)"
 
-  bazel build  :hello_world_uppercase &> "$TEST_log" \
+  # The next request omits the flag and must not inherit the diagnostic.
+  bazel build :hello_world_uppercase --strategy=Work=worker &> "$TEST_log" \
     || fail "build failed"
+  expect_not_log "diagnostic from request"
   assert_equals "HELLO WORLD" "$(cat $BINS/hello_world_uppercase.out)"
 }
 
